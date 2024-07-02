@@ -28,34 +28,23 @@ function createPerfectMaze(rows, columns) {
     return { maze, origin };
 }
 
-function nextPosition([...cur], dir, maze) {
-    switch (dir) {
-        case DIR_UP:
-            cur[0]--;
-            if (cur[0] < 0) return null;
-            return cur;
-        case DIR_DOWN:
-            cur[0]++;
-            if (cur[0] >= maze.length) return null;
-            return cur;
-        case DIR_RIGHT:
-            cur[1]++;
-            if (cur[1] >= maze[0].length) return null;
-            return cur;
-        case DIR_LEFT:
-            cur[1]--;
-            if (cur[1] < 0) return null;
-            return cur;
-    }
+function hasNextPosition(cur, dir, maze) {
+	if (dir == DIR_UP && cur[0] == 0) return false;
+    else if (dir == DIR_DOWN && cur[0] == maze.length - 1) return false;
+	else if (dir == DIR_RIGHT && cur[1] == maze[0].length - 1) return false;
+	else if (dir == DIR_LEFT && cur[1] == 0) return false;
+	return true;
 }
 
 function shiftOrigin(data) {
     const { maze, origin } = data;
-    let new_dir = Math.floor(Math.random() * 4),
-        new_pos;
-    while ((new_pos = nextPosition(origin, new_dir, maze)) == null) new_dir = Math.floor(Math.random() * 4);
+    let new_dir = Math.floor(Math.random() * 4);
+    while (!hasNextPosition(origin, new_dir, maze)) new_dir = Math.floor(Math.random() * 4);
     maze[origin[0]][origin[1]] = new_dir;
-    data.origin = new_pos;
+    if (new_dir == DIR_UP) origin[0]--;
+	else if (new_dir == DIR_DOWN) origin[0]++;
+	else if (new_dir == DIR_LEFT) origin[1]--;
+	else if (new_dir == DIR_RIGHT) origin[1]++;
     return data;
 }
 
@@ -67,20 +56,16 @@ document.body.style.setProperty("--size", Math.min(innerHeight / (ROWS + 5), inn
 const maze = createPerfectMaze(ROWS, COLS);
 const seenArr = new Uint8Array(Math.ceil((ROWS * COLS) / 8));
 let needed = Math.floor(ROWS * COLS * 0.95) - 1;
-needed = ROWS * COLS;
-console.log(seenArr, needed);
-// throw new Error();
+
 while (needed > 0) {
     const { origin } = shiftOrigin(maze);
-    const ind = origin[0] * ROWS + origin[1];
-    const bit = ind % 8;
-    if (((seenArr[Math.floor(ind / 8)] >> bit) & 1) == 0) {
+    const place = origin[0] * ROWS + origin[1];
+    const bit = place % 8, ind = Math.floor(place / 8);
+    if ((seenArr[ind] >> bit & 1) == 0) {
         needed--;
-        seenArr[Math.floor(ind / 8)] |= 1 << bit;
-        // console.log(Array.prototype.map.call(seenArr, x => x.toString(2).padStart(8, "0")).join(""), Math.floor(ind / 8), bit);
+        seenArr[ind] |= 1 << bit;
     }
 }
-console.log(maze);
 
 const mazeDiv = document.querySelector("#maze");
 mazeDiv.innerHTML = "";
@@ -124,11 +109,14 @@ setInterval(function () {
     shiftOrigin(maze);
     let cell = mazeDiv.children[r].children[c];
     cell.querySelector("span").innerText = textDir(maze.maze[r][c]);
-    let cache = {};
+    const cache = {};
     updateBorders(r, c, maze.maze, 2, cache);
-    [r, c] = maze.origin;
+    
+	[r, c] = maze.origin;
+	
     cell = mazeDiv.children[r].children[c];
     cell.querySelector("span").innerText = "O";
+
     updateBorders(r, c, maze.maze, 2, cache);
 }, 100);
 
