@@ -59,7 +59,7 @@ let needed = Math.floor(ROWS * COLS * 0.95) - 1;
 
 while (needed > 0) {
     const { origin } = shiftOrigin(maze);
-    const place = origin[0] * ROWS + origin[1];
+    const place = origin[0] * COLS + origin[1];
     const bit = place % 8, ind = Math.floor(place / 8);
     if ((seenArr[ind] >> bit & 1) == 0) {
         needed--;
