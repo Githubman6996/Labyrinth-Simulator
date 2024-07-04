@@ -18,7 +18,7 @@ console.log(wasm);
 wasm.instance.exports.setSeed(Date.now());
 const mem = new Uint32Array(wasm.instance.exports.memory.buffer);
 
-const ROWS = 50;
+const ROWS = 10;
 const COLS = 50;
 
 const maze_struct = wasm.instance.exports.createMaze(ROWS, COLS);
@@ -43,6 +43,7 @@ let maze = getMaze();
 console.log(maze);
 
 document.body.style.setProperty("--size", Math.min(innerHeight / (ROWS + 2), innerWidth / (COLS + 2)) + "px");
+document.body.style.setProperty("--size", `min(100vh / ${ROWS + 2}, 100vw / ${COLS + 2})`);
 const mazeDiv = document.querySelector("#maze");
 mazeDiv.innerHTML = "";
 
@@ -59,6 +60,15 @@ function textDir(dir) {
     }
 }
 
+const HUNT = 0;
+const REST = 1;
+
+let state = HUNT,
+    huntCountdown = 1000,
+    curR,
+    curC,
+    randR,
+    randC;
 {
     const mm = maze.maze;
     for (let r = 0; r < ROWS; r++) {
@@ -78,14 +88,35 @@ function textDir(dir) {
             cell.style.borderWidth = "1px";
             cell.style.borderStyle = "solid";
 
+            cell.onpointerenter = () => {
+                curR = r;
+                curC = c;
+                cell.style.backgroundColor = "#0080ff";
+            };
+
+            cell.onpointerleave = () => {
+                cell.style.backgroundColor = "unset";
+            };
+
             updateBorders(r, c, mm);
         }
     }
 }
 
 setInterval(function () {
+    if (curR != null && document.querySelector(".cell:hover") == null) curR = curC = null;
+    if (state == REST && huntCountdown-- <= 0) {
+        state = HUNT;
+    }
     let [r, c] = maze.origin;
-    wasm.instance.exports.shiftOrigin(maze_struct, ROWS, COLS);
+    if (curR == null || state == REST) wasm.instance.exports.shiftOrigin(maze_struct, ROWS, COLS);
+    else wasm.instance.exports.shiftOriginToPoint(maze_struct, ROWS, COLS, curR, curC);
+    if (r == curR && c == curC) {
+        state = REST;
+        huntCountdown = 1500;
+        randR = Math.floor(Math.random() * ROWS);
+        randC = Math.floor(Math.random() * COLS);
+    }
     const mm = maze.maze;
     let cell = mazeDiv.children[r].children[c];
     cell.querySelector("span").innerText = textDir(mm[r * COLS + c]);
@@ -95,10 +126,24 @@ setInterval(function () {
     [r, c] = maze.origin;
 
     cell = mazeDiv.children[r].children[c];
+    cell.animate(
+        [
+            {
+                backgroundColor: state == HUNT ? "red" : "#8000ff",
+            },
+            {
+                backgroundColor: "black",
+            },
+        ],
+        {
+            duration: 1000,
+            easing: "linear",
+        }
+    );
     cell.querySelector("span").innerText = "O";
 
     updateBorders(r, c, mm, 2, cache);
-}, 0);
+}, 50);
 
 function getCell(maze, r, c) {
     if (r >= 0 && r < ROWS && c >= 0 && c < COLS) return maze[r * COLS + c];

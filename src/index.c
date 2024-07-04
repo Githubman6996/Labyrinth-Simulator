@@ -103,6 +103,59 @@ real *shiftOrigin(real *mazeData, int rows, int cols)
 }
 
 EMSCRIPTEN_KEEPALIVE
+int preferredDir(int r1, int c1, int r2, int c2)
+{
+    int dr = r1 - r2; // -: go down, 0: same, +: go up
+    int dc = c1 - c2; // -: go right, 0: same, +: go left
+    if (dr == 0 && dc == 0) return rand() % 4;
+    if (dr == 0)
+        return dc < 0 ? DIR_RIGHT : DIR_LEFT;
+    if (dc == 0)
+        return dr < 0 ? DIR_DOWN : DIR_UP;
+    float slope = (float) dc / dr; // really just want the sign
+    bool horizontal = abs(dc) >= abs(dr); // go horizontal if difference in column is greater than row
+    bool goRight = dc < 0;
+    if (slope > 0) {
+        if (goRight) {
+            if (horizontal) return DIR_RIGHT;
+            return DIR_DOWN;
+        }
+        if (horizontal) return DIR_LEFT;
+        return DIR_UP;
+    }
+    if (goRight) {
+        if (horizontal) return DIR_RIGHT;
+        return DIR_UP;
+    }
+    if (horizontal) return DIR_LEFT;
+    return DIR_DOWN;
+}
+
+EMSCRIPTEN_KEEPALIVE
+real *shiftOriginToPoint(real *mazeData, int rows, int cols, int r, int c)
+{
+    int new_dir = rand() % 4;
+    int preferred = preferredDir(mazeData->origin[0], mazeData->origin[1], r, c);
+    // new_dir = preferred;
+    while (!nextPosition(mazeData->origin, new_dir, rows, cols) || rand() > RAND_MAX / 2)
+    {
+        new_dir = rand() % 4;
+        if (new_dir == preferred && nextPosition(mazeData->origin, new_dir, rows, cols)) break;
+    }
+
+    mazeData->maze[mazeData->origin[0] * cols + mazeData->origin[1]] = new_dir;
+    if (new_dir == DIR_UP)
+        mazeData->origin[0]--;
+    else if (new_dir == DIR_DOWN)
+        mazeData->origin[0]++;
+    else if (new_dir == DIR_LEFT)
+        mazeData->origin[1]--;
+    else if (new_dir == DIR_RIGHT)
+        mazeData->origin[1]++;
+    return mazeData;
+}
+
+EMSCRIPTEN_KEEPALIVE
 real *createMaze(int rows, int cols)
 {
     real *mazeData = createPerfectMaze(rows, cols);
