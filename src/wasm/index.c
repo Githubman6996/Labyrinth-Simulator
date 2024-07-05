@@ -137,7 +137,7 @@ real *shiftOriginToPoint(real *mazeData, int rows, int cols, int r, int c)
     int new_dir = rand() % 4;
     int preferred = preferredDir(mazeData->origin[0], mazeData->origin[1], r, c);
     // new_dir = preferred;
-    while (!nextPosition(mazeData->origin, new_dir, rows, cols) || rand() > RAND_MAX / 2)
+    while (!nextPosition(mazeData->origin, new_dir, rows, cols) || rand() % 4 != 0)
     {
         new_dir = rand() % 4;
         if (new_dir == preferred && nextPosition(mazeData->origin, new_dir, rows, cols)) break;

@@ -28,12 +28,29 @@ function createPerfectMaze(rows, columns) {
     return { maze, origin };
 }
 
+function createMaze(rows, cols) {
+    const maze = createPerfectMaze(rows, cols);
+    const seenArr = new Uint8Array(Math.ceil((ROWS * COLS) / 8));
+    let needed = ROWS * COLS - 1;
+    while (needed > 0) {
+        const { origin } = shiftOrigin(maze);
+        const place = origin[0] * COLS + origin[1];
+        const bit = place % 8,
+            ind = Math.floor(place / 8);
+        if (((seenArr[ind] >> bit) & 1) == 0) {
+            needed--;
+            seenArr[ind] |= 1 << bit;
+        }
+    }
+    return maze;
+}
+
 function hasNextPosition(cur, dir, maze) {
-	if (dir == DIR_UP && cur[0] == 0) return false;
+    if (dir == DIR_UP && cur[0] == 0) return false;
     else if (dir == DIR_DOWN && cur[0] == maze.length - 1) return false;
-	else if (dir == DIR_RIGHT && cur[1] == maze[0].length - 1) return false;
-	else if (dir == DIR_LEFT && cur[1] == 0) return false;
-	return true;
+    else if (dir == DIR_RIGHT && cur[1] == maze[0].length - 1) return false;
+    else if (dir == DIR_LEFT && cur[1] == 0) return false;
+    return true;
 }
 
 function shiftOrigin(data) {
@@ -42,33 +59,21 @@ function shiftOrigin(data) {
     while (!hasNextPosition(origin, new_dir, maze)) new_dir = Math.floor(Math.random() * 4);
     maze[origin[0]][origin[1]] = new_dir;
     if (new_dir == DIR_UP) origin[0]--;
-	else if (new_dir == DIR_DOWN) origin[0]++;
-	else if (new_dir == DIR_LEFT) origin[1]--;
-	else if (new_dir == DIR_RIGHT) origin[1]++;
+    else if (new_dir == DIR_DOWN) origin[0]++;
+    else if (new_dir == DIR_LEFT) origin[1]--;
+    else if (new_dir == DIR_RIGHT) origin[1]++;
     return data;
 }
 
-const ROWS = 20;
-const COLS = 20;
+const ROWS = 50;
+const COLS = 50;
 
-document.body.style.setProperty("--size", Math.min(innerHeight / (ROWS + 5), innerWidth / (COLS + 5)) + "px");
-
-const maze = createPerfectMaze(ROWS, COLS);
-const seenArr = new Uint8Array(Math.ceil((ROWS * COLS) / 8));
-let needed = Math.floor(ROWS * COLS * 0.95) - 1;
-
-while (needed > 0) {
-    const { origin } = shiftOrigin(maze);
-    const place = origin[0] * COLS + origin[1];
-    const bit = place % 8, ind = Math.floor(place / 8);
-    if ((seenArr[ind] >> bit & 1) == 0) {
-        needed--;
-        seenArr[ind] |= 1 << bit;
-    }
-}
-
+document.body.style.setProperty("--size", `min(100vh / ${ROWS + 2}, 100vw / ${COLS + 2})`);
 const mazeDiv = document.querySelector("#maze");
 mazeDiv.innerHTML = "";
+
+const maze = window.finishMaze ? createMaze(ROWS, COLS) : createPerfectMaze(ROWS, COLS);
+delete window.finishMaze;
 
 function textDir(dir) {
     switch (dir) {
@@ -83,24 +88,30 @@ function textDir(dir) {
     }
 }
 
-for (let r = 0; r < ROWS; r++) {
-    const row = document.createElement("div");
-    row.className = "row";
-    mazeDiv.appendChild(row);
-    for (let c = 0; c < COLS; c++) {
-        const cell = document.createElement("div");
-        cell.dataset.row = r;
-        cell.dataset.col = c;
-        cell.className = "cell";
-        row.appendChild(cell);
-        const span = document.createElement("span");
-        span.innerHTML = textDir(maze.maze[r][c]);
-        cell.appendChild(span);
+{
+    const mm = maze.maze;
+    for (let r = 0; r < ROWS; r++) {
+        const row = document.createElement("div");
+        row.className = "row";
+        mazeDiv.appendChild(row);
+        for (let c = 0; c < COLS; c++) {
+            const cell = document.createElement("div");
+            cell.dataset.row = r;
+            cell.dataset.col = c;
+            cell.className = "cell";
+            row.appendChild(cell);
+            const span = document.createElement("span");
+            span.innerHTML = textDir(mm[r][c]);
+            cell.appendChild(span);
 
-        cell.style.borderWidth = "1px";
-        cell.style.borderStyle = "solid";
+            cell.style.borderWidth = "0.5px";
+            cell.style.borderStyle = "solid";
 
-        updateBorders(r, c, maze.maze);
+            cell.style.borderTopColor = mm[r][c] == 0 || mm[r - 1]?.[c] == 2 ? "transparent" : "white";
+            cell.style.borderBottomColor = mm[r][c] == 2 || mm[r + 1]?.[c] == 0 ? "transparent" : "white";
+            cell.style.borderRightColor = mm[r][c] == 1 || mm[r][c + 1] == 3 ? "transparent" : "white";
+            cell.style.borderLeftColor = mm[r][c] == 3 || mm[r][c - 1] == 1 ? "transparent" : "white";
+        }
     }
 }
 
@@ -111,14 +122,28 @@ setInterval(function () {
     cell.querySelector("span").innerText = textDir(maze.maze[r][c]);
     const cache = {};
     updateBorders(r, c, maze.maze, 2, cache);
-    
-	[r, c] = maze.origin;
-	
+
+    [r, c] = maze.origin;
+
     cell = mazeDiv.children[r].children[c];
+    cell.animate(
+        [
+            {
+                backgroundColor: "#8000ff",
+            },
+            {
+                backgroundColor: "black",
+            },
+        ],
+        {
+            duration: 1000,
+            easing: "linear",
+        }
+    );
     cell.querySelector("span").innerText = "O";
 
     updateBorders(r, c, maze.maze, 2, cache);
-}, 100);
+}, 50);
 
 function updateBorders(r, c, maze, depth = 2, cache = {}) {
     if ((depth != 2 && cache[r + " " + c]) || depth <= 0 || r < 0 || r >= maze.length || c < 0 || c >= maze[r].length) return;

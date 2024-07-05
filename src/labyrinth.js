@@ -8,7 +8,7 @@ const memory = new WebAssembly.Memory({
     maximum: 512,
 });
 
-const wasm = await WebAssembly.instantiateStreaming(fetch("src/origin_shift.wasm"), {
+const wasm = await WebAssembly.instantiateStreaming(fetch("src/wasm/origin_shift.wasm"), {
     env: {
         emscripten_resize_heap: memory.grow,
     },
@@ -18,7 +18,7 @@ console.log(wasm);
 wasm.instance.exports.setSeed(Date.now());
 const mem = new Uint32Array(wasm.instance.exports.memory.buffer);
 
-const ROWS = 10;
+const ROWS = 50;
 const COLS = 50;
 
 const maze_struct = wasm.instance.exports.createMaze(ROWS, COLS);
@@ -71,6 +71,7 @@ let state = HUNT,
     randC;
 {
     const mm = maze.maze;
+    console.log(mm)
     for (let r = 0; r < ROWS; r++) {
         const row = document.createElement("div");
         row.className = "row";
@@ -85,8 +86,13 @@ let state = HUNT,
             span.innerHTML = textDir(mm[r * COLS + c]);
             cell.appendChild(span);
 
-            cell.style.borderWidth = "1px";
+            cell.style.borderWidth = "0.5px";
             cell.style.borderStyle = "solid";
+
+            cell.style.borderTopColor = mm[r * COLS + c] == 0 || getCell(mm, r - 1, c) == 2 ? "transparent" : "white";
+            cell.style.borderBottomColor = mm[r * COLS + c] == 2 || getCell(mm, r + 1, c) == 0 ? "transparent" : "white";
+            cell.style.borderRightColor = mm[r * COLS + c] == 1 || getCell(mm, r, c + 1) == 3 ? "transparent" : "white";
+            cell.style.borderLeftColor = mm[r * COLS + c] == 3 || getCell(mm, r, c - 1) == 1 ? "transparent" : "white";
 
             cell.onpointerenter = () => {
                 curR = r;
@@ -97,8 +103,6 @@ let state = HUNT,
             cell.onpointerleave = () => {
                 cell.style.backgroundColor = "unset";
             };
-
-            updateBorders(r, c, mm);
         }
     }
 }

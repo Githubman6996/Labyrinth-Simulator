@@ -5,7 +5,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Labyrinth Simulator</title>
-    <script src="script wasm.js" defer type="module"></script>
+    <script>
+        const srcs = ["script", "script", "script_wasm","script_wasm", "dfs", "hunt_and_kill", "labyrinth"];
+        const choices = "0 - Javascript Origin Shift\n1 - Javascript Origin Shift Finished\n2 - WASM Origin Shift\n3 - WASM Origin Shift Finished\n4 - DFS (Wilson's Algorithm)\n5 - Hunt and Kill Algorithm\n6 - Labyrinth Game"
+        let choice = parseInt(prompt("Which version would you like to view?\n" + choices));
+        while (isNaN(choice) || choice < 0 || choice >= srcs.length) choice = parseInt(prompt("Which version would you like to view?\n" + choices + "\n\nInvalid Input"));
+        const script = document.createElement("script");
+        if (choice == 1 || choice == 3)
+            window.finishMaze = true;
+        script.src = "src/" + srcs[choice] + ".js";
+        script.type = "module";
+        document.head.append(script);
+    </script>
     <style>
         * {
             box-sizing: border-box;
