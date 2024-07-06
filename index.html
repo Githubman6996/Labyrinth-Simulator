@@ -6,9 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Labyrinth Simulator</title>
     <script>
-        const srcs = ["script", "script", "script_wasm","script_wasm", "dfs", "hunt_and_kill", "labyrinth"];
+        const srcs = ["script", "script", "script_wasm","script_wasm", "dfs", "hunt_and_kill", "labyrinth/labyrinth"];
         const choices = "0 - Javascript Origin Shift\n1 - Javascript Origin Shift Finished\n2 - WASM Origin Shift\n3 - WASM Origin Shift Finished\n4 - DFS (Wilson's Algorithm)\n5 - Hunt and Kill Algorithm\n6 - Labyrinth Game"
-        let choice = parseInt(prompt("Which version would you like to view?\n" + choices));
+        let choice = 6 || parseInt(prompt("Which version would you like to view?\n" + choices));
         while (isNaN(choice) || choice < 0 || choice >= srcs.length) choice = parseInt(prompt("Which version would you like to view?\n" + choices + "\n\nInvalid Input"));
         const script = document.createElement("script");
         if (choice == 1 || choice == 3)
@@ -62,6 +62,7 @@
 
 <body>
     <div id="maze"></div>
+    <canvas style="display:none"></canvas>
 </body>
 
 </html>

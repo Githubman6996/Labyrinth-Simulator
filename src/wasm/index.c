@@ -7,6 +7,7 @@
 #define DIR_RIGHT 1
 #define DIR_DOWN 2
 #define DIR_LEFT 3
+#define ORIGIN -1
 
 typedef struct OriginShift
 {
@@ -57,6 +58,7 @@ real *createPerfectMaze(int rows, int cols)
         my_struct->origin[1] = cols - 1;
         break;
     }
+    my_struct->maze[my_struct->origin[0] * cols + my_struct->origin[1]] = ORIGIN;
     return my_struct;
 }
 
@@ -99,6 +101,7 @@ real *shiftOrigin(real *mazeData, int rows, int cols)
         mazeData->origin[1]--;
     else if (new_dir == DIR_RIGHT)
         mazeData->origin[1]++;
+    mazeData->maze[mazeData->origin[0] * cols + mazeData->origin[1]] = ORIGIN;
     return mazeData;
 }
 
@@ -152,6 +155,7 @@ real *shiftOriginToPoint(real *mazeData, int rows, int cols, int r, int c)
         mazeData->origin[1]--;
     else if (new_dir == DIR_RIGHT)
         mazeData->origin[1]++;
+    mazeData->maze[mazeData->origin[0] * cols + mazeData->origin[1]] = ORIGIN;
     return mazeData;
 }
 

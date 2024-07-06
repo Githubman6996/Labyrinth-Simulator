@@ -146,9 +146,9 @@ async function huntAndKill(maze, [row, col], fromDir, rand) {
     maze[row * COLS + col] = (fromDir + 2) % 4;
     updateBorders(row, col, maze, 2, {});
     await new Promise((r) => setTimeout(r, 0));
-    let next = Math.floor(Math.random() * 4),
+    let next = rand.next(),
         tries = 0;
-    while (++tries < 4 && getNextPos(maze, row, col, next) != -1) next = Math.floor(Math.random() * 4);
+    while (++tries < 4 && getNextPos(maze, row, col, next) != -1) next = rand.next();
     return huntAndKill(maze, nextPos(row, col, next), next, rand);
 }
 
