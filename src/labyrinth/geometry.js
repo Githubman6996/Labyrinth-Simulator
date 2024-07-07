@@ -1,6 +1,7 @@
 // Vertex buffer format: XYZ RGB (interleaved)
 
 import { showError } from "./utils.js";
+import { MazeShape } from "./webgl.js";
 
 //
 // Cube geometry
@@ -59,14 +60,37 @@ export const CUBE_INDICES = new Uint16Array([
 
 export const TABLE_VERTICES = new Float32Array([
     // Top face
-    -10.0, 0.0, -10.0, 0.2, 0.2, 0.2,
-    -10.0, 0.0, 10.0, 0.2, 0.2, 0.2,
-    10.0, 0.0, 10.0, 0.2, 0.2, 0.2,
-    10.0, 0.0, -10.0, 0.2, 0.2, 0.2,
+    -1.0, 0.0, -1.0, 0.2, 0.2, 0.2,
+    -1.0, 0.0, 1.0, 0.2, 0.2, 0.2,
+    1.0, 0.0, 1.0, 0.2, 0.2, 0.2,
+    1.0, 0.0, -1.0, 0.2, 0.2, 0.2,
 ]);
 export const TABLE_INDICES = new Uint16Array([
     0, 1, 2,
     0, 2, 3, // top
+]);
+
+export const WALL_VERTICES = (ROWS, COLS, cellSize, wallThickness) => new Float32Array([
+    -wallThickness, 1, -wallThickness,
+    -wallThickness, 1, wallThickness,
+    wallThickness, 1, wallThickness,
+    wallThickness, 1, -wallThickness,
+
+    -wallThickness, 1, -ROWS * cellSize - wallThickness,
+    -wallThickness, 1, -ROWS * cellSize + wallThickness,
+    wallThickness, 1, -ROWS * cellSize + wallThickness,
+    wallThickness, 1, -ROWS * cellSize - wallThickness,
+    
+    COLS * cellSize + wallThickness, 1, -ROWS * cellSize - wallThickness,
+    COLS * cellSize + wallThickness, 1, -ROWS * cellSize + wallThickness,
+    COLS * cellSize - wallThickness, 1, -ROWS * cellSize + wallThickness,
+    COLS * cellSize - wallThickness, 1, -ROWS * cellSize - wallThickness,
+    
+    COLS * cellSize + wallThickness, 1, - wallThickness,
+    COLS * cellSize + wallThickness, 1, wallThickness,
+    COLS * cellSize - wallThickness, 1, wallThickness,
+    COLS * cellSize - wallThickness, 1, - wallThickness
+
 ]);
 
 export function create3dPosColorInterleavedVao(gl, vertexBuffer, indexBuffer, posAttrib, colorAttrib) {

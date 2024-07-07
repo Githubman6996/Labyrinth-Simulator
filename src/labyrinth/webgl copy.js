@@ -1,10 +1,11 @@
-import { CUBE_INDICES, CUBE_VERTICES, TABLE_INDICES, TABLE_VERTICES, WALL_VERTICES, create3dPosColorInterleavedVao } from "./geometry.js";
+import { CUBE_INDICES, CUBE_VERTICES, TABLE_INDICES, TABLE_VERTICES, create3dPosColorInterleavedVao } from "./geometry.js";
 import { createProgram, createStaticIndexBuffer, createStaticVertexBuffer, getContext, showError } from "./utils.js";
 const { glMatrix, mat4, quat, vec3 } = window.glMatrix;
 
 const lookat = (() => {
     return function lookat(out, pos, target, up, rot) {
         if (pos[0] != target[0] || pos[2] != target[2]) return mat4.lookAt(out, pos, target, up);
+
         return mat4.lookAt(out, pos, target, vec3.scale([], [Math.cos(rot), 0, Math.sin(rot)], pos[1] < target[1] ? -1 : 1));
     };
 })();
@@ -50,13 +51,13 @@ class Shape {
     }
 }
 
-export class MazeShape {
+class MazeShape {
     static scale = 1;
     static rotationAxis = [0, 1, 0];
     static rotationAngle = -Math.PI / 2;
 
-    static cellSize = 1;
-    static wallThickness = 0.1;
+    static cellSize = 2;
+    static wallThickness = 0.2;
 
     vertexBuf;
     indexBuf;
@@ -67,22 +68,19 @@ export class MazeShape {
     scaleVec = vec3.create();
     rotation = quat.create();
 
-    pos;
+    pos = [0, 0, 0];
 
     verticies;
     indicies; // = new Uint16Array([0, 1, 2, 0, 2, 3]);
     numInds = 6;
     lastMaze;
     curMaze;
-    stretchArr;
     constructor(gl, mazeData, posAttrib) {
         this.mazeData = mazeData;
         this.gl = gl;
         this.vertexBuf = this.createBuffer();
         this.indexBuf = this.createBuffer();
         this.vao = this.createMazeVao(posAttrib);
-        this.wallVao = this.createMazeWallVao(posAttrib);
-        this.pos = [(-this.mazeData.size.ROWS * MazeShape.cellSize) / 2, 0, (-this.mazeData.size.COLS * MazeShape.cellSize) / 2];
 
         this.curMaze = mazeData.maze;
 
@@ -101,20 +99,17 @@ export class MazeShape {
         this.verticies = new Float32Array(verts);
         this.updateVertexBuffer();
         console.log((window.mazeShape = this));
+        console.log(this.verticies);
         this.indicies = new Uint16Array(ROWS * COLS * 6);
-        this.stretchArr = new Array(COLS);
-        window.addEventListener("keydown", (e) => e.code == "KeyG" && this.initMaze());
+        this.rowCache = new Uint16Array(ROWS);
         this.initMaze();
     }
     isOrigin(row, col) {
         const o = this.mazeData.origin;
         return row == o[0] && col == o[1];
     }
-    isValidCell(row, col) {
-        return row >= 0 && row < this.mazeData.size.ROWS && col >= 0 && col < this.mazeData.size.COLS;
-    }
     getCell(row, col, maze) {
-        if (this.isValidCell(row, col)) return (maze || this.mazeData.maze)[row * this.mazeData.size.COLS + col];
+        if (row >= 0 && row < this.mazeData.size.ROWS && col >= 0 && col < this.mazeData.size.COLS) return (maze || this.mazeData.maze)[row * this.mazeData.size.COLS + col];
     }
     canConnectRight(row, col, maze) {
         // return !this.isOrigin(row, col) && !this.isOrigin(row, col + 1) &&
@@ -131,22 +126,6 @@ export class MazeShape {
             for (let i = 0; i < this.numInds; i++) this.indicies[i] = old[i];
         }
         return (this.indicies[this.numInds++] = val);
-    }
-    getInd(row, col) {
-        return (row * this.mazeData.size.COLS + col) * 4;
-    }
-    fromInd(ind) {
-        const cols = this.mazeData.size.COLS;
-        const i = Math.floor(ind / 4);
-        return [Math.floor(i / cols), i % cols];
-    }
-    addFace(first, second, third, fourth) {
-        this.addInd(first);
-        this.addInd(second);
-        this.addInd(third);
-        this.addInd(first);
-        this.addInd(third);
-        this.addInd(fourth);
     }
     initMaze() {
         // cell corners = (c * cellSize, r * cellSize)
@@ -167,66 +146,44 @@ export class MazeShape {
          */
         this.numInds = 0;
         const { ROWS, COLS } = this.mazeData.size;
-        const stretchArr = this.stretchArr;
-        stretchArr.fill(-1);
         for (let r = 0; r < ROWS; r++) {
-            let stretch = -1;
+            let stretch;
             for (let c = 0; c < COLS; c++) {
-                if (r >= 1 && !this.canConnectUp(r, c) && c >= stretch) {
-                    stretch = c;
-                    while (stretch < COLS && !this.canConnectUp(r, stretch)) stretch++;
-                    let upLeft = this.getInd(r - 1, c - 1) + 2,
-                        downLeft = this.getInd(r, c - 1) + 1,
-                        upRight = this.getInd(r - 1, stretch) + 3,
-                        downRight = this.getInd(r, stretch);
-                    if (c == 0) {
-                        upLeft = this.getInd(r - 1, c) + 3;
-                        downLeft = this.getInd(r, c);
-                    }
-                    if (stretch == COLS) {
-                        upRight = this.getInd(r - 1, stretch - 1) + 2;
-                        downRight = this.getInd(r, stretch - 1) + 1;
-                    }
-                    this.addFace(upLeft, upRight, downRight, downLeft);
+                // if (this.isOrigin(r, c)) continue;
+                if (this.canConnectUp(r, c)) {
+                    const up = ((r - 1) * COLS + c) * 4;
+                    const down = (r * COLS + c) * 4;
+                    this.addInd(up + 3);
+                    this.addInd(up + 2);
+                    this.addInd(down + 1);
+                    this.addInd(up + 3);
+                    this.addInd(down + 1);
+                    this.addInd(down);
                 }
-                if (c + 1 < COLS && !this.canConnectRight(r, c) && r >= stretchArr[c]) {
-                    stretchArr[c] = r;
-                    while (stretchArr[c] < ROWS && !this.canConnectRight(stretchArr[c], c)) stretchArr[c]++;
-                    let upLeft = this.getInd(r - 1, c) + 2,
-                        upRight = this.getInd(r - 1, c + 1) + 3,
-                        downLeft = this.getInd(stretchArr[c], c) + 1,
-                        downRight = this.getInd(stretchArr[c], c + 1);
-                    if (r == 0) {
-                        upLeft = this.getInd(r, c) + 1;
-                        upRight = this.getInd(r, c + 1);
-                    }
-                    if (stretchArr[c] == ROWS) {
-                        downLeft = this.getInd(stretchArr[c] - 1, c) + 2;
-                        downRight = this.getInd(stretchArr[c] - 1, c + 1) + 3;
-                    }
-                    this.addFace(upLeft, upRight, downRight, downLeft);
-                }
+                if (c <= stretch) continue;
+                stretch = c;
+                while (this.canConnectRight(r, stretch)) stretch++;
+                const first = (r * COLS + c) * 4;
+                const third = (r * COLS + stretch) * 4 + 2;
+                this.addInd(first);
+                this.addInd((r * COLS + stretch) * 4 + 1);
+                this.addInd(third);
+                this.addInd(first);
+                this.addInd(third);
+                this.addInd((r * COLS + c) * 4 + 3);
             }
         }
         this.updateIndexBuffer();
         this.lastMaze = this.mazeData.maze;
-        console.log(this.numInds);
     }
     findInd(first, last) {
         let i;
         for (i = 0; i < this.indicies.length && this.indicies[i] != this.indicies[i + 1]; i += 6) if (this.indicies[i] == first && this.indicies[i + 3] == first && this.indicies[i + 5] == last) return i;
-        // if (i == this.numInds) console.log("ruh roh 1");
-        return i;
-    }
-    findInd2(first, second) {
-        let i;
-        for (i = 0; i < this.indicies.length && this.indicies[i] != this.indicies[i + 1]; i += 6) if (this.indicies[i] == first && this.indicies[i + 3] == first && this.indicies[i + 1] == second) return i;
-        // if (i == this.numInds) console.log("ruh roh 2");
         return i;
     }
     test = 0;
     updateMaze() {
-        ++this.test;
+        this.test++;
         // cell corners = (c * cellSize, r * cellSize)
         /**
          * cell walls =
@@ -248,97 +205,43 @@ export class MazeShape {
             origin,
         } = this.mazeData;
         const faces = [];
-        const addFace = (a, b, c, d) => {
-            if (a == b) return;
-            faces.push(a, b, c, a, c, d);
-        };
         const trashInds = [];
-        // TODO: instead of removing row/column, instead shrink or extend it
-        for (let r = Math.max(0, origin[0] - 2); r < Math.min(ROWS, origin[0] + 2); r++) {
+        for (let r = Math.max(0, origin[0] - 3); r < Math.min(ROWS, origin[0] + 3); r++) {
             let stretch;
-            for (let c = Math.max(0, origin[1] - 2); c < Math.min(COLS, origin[1] + 2); c++) {
-                const canUp = this.canConnectUp(r, c); // add gap
-                const couldUp = this.canConnectUp(r, c, this.lastMaze); // remove gap
+            for (let c = Math.max(0, origin[1] - 3); c < Math.min(COLS, origin[1] + 3); c++) {
+                const canUp = this.canConnectUp(r, c);
+                const couldUp = this.canConnectUp(r, c, this.lastMaze);
                 if (canUp != couldUp) {
-                    let leftC = c - 1;
-                    while (leftC >= 0 && !this.canConnectUp(r, leftC)) leftC--;
-                    leftC++;
-                    let upLeft = leftC == 0 ? this.getInd(r - 1, leftC) + 3 : this.getInd(r - 1, leftC - 1) + 2,
-                        downLeft = leftC == 0 ? this.getInd(r, leftC) : this.getInd(r, leftC - 1) + 1,
-                        upRight,
-                        downRight;
-                    let remove;
-                    if ((remove = this.findInd(upLeft, downLeft)) < this.numInds) {
-                        trashInds.push(this.findInd(upLeft, downLeft)); // remove left or whole row
-                    }
-
-                    if (canUp) {
-                        // add left
-                        upRight = this.getInd(r - 1, c) + 3;
-                        downRight = this.getInd(r, c);
-                        if (upLeft + 5 != upRight) addFace(upLeft, upRight, downRight, downLeft);
-                        if (c != COLS - 1) {
-                            // add right
-                            stretch = c + 1;
-                            while (stretch < COLS && !this.canConnectUp(r, stretch)) stretch++;
-                            upLeft = this.getInd(r - 1, c) + 2;
-                            downLeft = this.getInd(r, c) + 1;
-                            upRight = stretch == COLS ? this.getInd(r - 1, stretch - 1) + 2 : this.getInd(r - 1, stretch) + 3;
-                            downRight = stretch == COLS ? this.getInd(r, stretch - 1) + 1 : this.getInd(r, stretch);
-                            if (upLeft + 5 != upRight) addFace(upLeft, upRight, downRight, downLeft);
-                        }
-                    } else {
-                        // remove right if valid and had a wall
-                        if (c + 1 < COLS && !this.canConnectUp(r, c + 1, this.lastMaze)) {
-                            trashInds.push(this.findInd(this.getInd(r - 1, c) + 2, this.getInd(r, c) + 1));
-                        }
-                        // add row
-                        stretch = leftC;
-                        while (stretch < COLS && !this.canConnectUp(r, stretch)) stretch++;
-                        upRight = stretch == COLS ? this.getInd(r - 1, stretch - 1) + 2 : this.getInd(r - 1, stretch) + 3;
-                        downRight = stretch == COLS ? this.getInd(r, stretch - 1) + 1 : this.getInd(r, stretch);
-                        addFace(upLeft, upRight, downRight, downLeft);
-                    }
+                    const up = ((r - 1) * COLS + c) * 4;
+                    const down = (r * COLS + c) * 4;
+                    if (couldUp) trashInds.push(this.findInd(up + 3, down));
+                    else faces.push(up + 3, up + 2, down + 1, up + 3, down + 1, down);
                 }
-                const canRight = this.canConnectRight(r, c); // add gap
-                const couldRight = this.canConnectRight(r, c, this.lastMaze); // remove gap
+                const canRight = this.canConnectRight(r, c);
+                const couldRight = this.canConnectRight(r, c, this.lastMaze);
                 if (canRight != couldRight) {
-                    let topR = r - 1;
-                    while (topR >= 0 && !this.canConnectRight(topR, c)) topR--;
-                    topR++;
-                    let upLeft = topR == 0 ? this.getInd(topR, c) + 1 : this.getInd(topR - 1, c) + 2,
-                        upRight = topR == 0 ? this.getInd(topR, c + 1) : this.getInd(topR - 1, c + 1) + 3,
-                        downLeft,
-                        downRight;
-                    let remove;
-                    if ((remove = this.findInd2(upLeft, upRight)) < this.numInds) {
-                        trashInds.push(remove); // remove top / bottom
-                    }
+                    let leftC = c - 1;
+                    while (this.canConnectRight(r, leftC)) leftC--;
+                    leftC++;
+                    let left = (r * COLS + leftC) * 4;
+                    let right = (r * COLS + c) * 4;
+                    trashInds.push(this.findInd(left, left + 3)); // remove left or whole row
+
                     if (canRight) {
-                        // add top
-                        downLeft = this.getInd(r, c) + 1;
-                        downRight = this.getInd(r, c + 1);
-                        if (r != topR) addFace(upLeft, upRight, downRight, downLeft);
-                        // add bottom
-                        if (r != ROWS - 1) {
-                            stretch = r + 1;
-                            while (stretch < ROWS && !this.canConnectRight(stretch, c)) stretch++;
-                            upLeft = this.getInd(r, c) + 2;
-                            upRight = this.getInd(r, c + 1) + 3;
-                            downLeft = stretch == ROWS ? this.getInd(stretch - 1, c) + 2 : this.getInd(stretch, c) + 1;
-                            downRight = stretch == ROWS ? this.getInd(stretch - 1, c + 1) + 3 : this.getInd(stretch, c + 1);
-                            if (r + 1 != stretch) addFace(upLeft, upRight, downRight, downLeft);
-                        }
+                        left = (r * COLS + c + 1) * 4;
+                        trashInds.push(this.findInd(left, left + 3)); // remove right
+                        stretch = leftC;
+                        while (this.canConnectRight(r, stretch)) stretch++;
+                        left = (r * COLS + leftC) * 4;
+                        right = (r * COLS + stretch) * 4;
+                        faces.push(left, right + 1, right + 2, left, right + 2, left + 3); // add whole
                     } else {
-                        // remove bottom if valid and has wall
-                        if (r + 1 < ROWS && !this.canConnectRight(r + 1, c, this.lastMaze))
-                            trashInds.push(this.findInd2(this.getInd(r, c) + 2, this.getInd(r, c + 1) + 3));
-                        // add column
-                        stretch = topR;
-                        while (stretch < ROWS && !this.canConnectRight(stretch, c)) stretch++;
-                        downLeft = stretch == ROWS ? this.getInd(stretch - 1, c) + 2 : this.getInd(stretch, c) + 1;
-                        downRight = stretch == ROWS ? this.getInd(stretch - 1, c + 1) + 3 : this.getInd(stretch, c + 1);
-                        addFace(upLeft, upRight, downRight, downLeft);
+                        faces.push(left, right + 1, right + 2, left, right + 2, left + 3); // add left
+                        stretch = c + 1;
+                        while (this.canConnectRight(r, stretch)) stretch++;
+                        left = (r * COLS + c + 1) * 4;
+                        right = (r * COLS + stretch) * 4;
+                        faces.push(left, right + 1, right + 2, left, right + 2, left + 3); // add right
                     }
                 }
             }
@@ -346,7 +249,7 @@ export class MazeShape {
         let i = 0,
             k = 0;
 
-        // let oldNum = this.numInds;
+        let oldNum = this.numInds;
 
         trashInds.sort((a, b) => a - b);
 
@@ -406,7 +309,8 @@ export class MazeShape {
             }
             this.numInds = cur;
         }
-        // console.log(origin, this.test, trashInds.length, faces.length / 6, oldNum + faces.length - trashInds.length * 6, this.numInds, trashInds);
+        console.log(this.test)
+        // console.log(trashInds.length, faces.length / 6, oldNum + faces.length - trashInds.length * 6, this.numInds);
         this.updateIndexBuffer();
         this.lastMaze = this.mazeData.maze;
     }
@@ -448,53 +352,6 @@ export class MazeShape {
 
         return vao;
     }
-    createMazeWallVao(posAttrib) {
-        const vao = this.gl.createVertexArray();
-        if (!vao) {
-            showError("Failed to create VAO");
-            return null;
-        }
-
-        this.gl.bindVertexArray(vao);
-
-        this.gl.enableVertexAttribArray(posAttrib);
-
-        const { ROWS, COLS } = this.mazeData.size;
-        const { cellSize, wallThickness } = MazeShape;
-
-        const vertexBuf = this.createBuffer();
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, vertexBuf);
-        this.gl.bufferData(this.gl.ARRAY_BUFFER, WALL_VERTICES(ROWS, COLS, cellSize, wallThickness), this.gl.STATIC_DRAW);
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, null);
-        const indexBuf = this.createBuffer();
-        this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, indexBuf);
-        this.gl.bufferData(
-            this.gl.ELEMENT_ARRAY_BUFFER,
-            new Uint16Array([
-                1, 2, 7, 1, 7, 4,
-
-                1, 13, 12, 1, 12, 0,
-
-                14, 13, 8, 14, 8, 11,
-
-                5, 9, 8, 5, 8, 4,
-            ]),
-            this.gl.STATIC_DRAW
-        );
-        this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, null);
-
-        // Interleaved format: (x, y, z) (all f32)
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, vertexBuf);
-        this.gl.vertexAttribPointer(posAttrib, 3, this.gl.FLOAT, false, 3 * Float32Array.BYTES_PER_ELEMENT, 0);
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, null);
-
-        this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, indexBuf);
-        this.gl.bindVertexArray(null);
-
-        this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, null); // Not sure if necessary, but not a bad idea.
-
-        return vao;
-    }
     draw(matWorldUniform) {
         if (this.mazeData.hasUpdate) this.updateMaze();
         quat.setAxisAngle(this.rotation, MazeShape.rotationAxis, MazeShape.rotationAngle);
@@ -505,8 +362,6 @@ export class MazeShape {
         this.gl.uniformMatrix4fv(matWorldUniform, false, this.matWorld);
         this.gl.bindVertexArray(this.vao);
         this.gl.drawElements(this.gl.TRIANGLES, this.numInds, this.gl.UNSIGNED_SHORT, 0);
-        this.gl.bindVertexArray(this.wallVao);
-        this.gl.drawElements(this.gl.TRIANGLES, 24, this.gl.UNSIGNED_SHORT, 0);
         this.gl.bindVertexArray(null);
     }
 }
@@ -564,12 +419,12 @@ export function introTo3DDemo(mazeData) {
 
     const UP_VEC = vec3.fromValues(0, 1, 0);
     const shapes = [
-        new Shape(vec3.fromValues(0, 0, 0), 10, UP_VEC, 0, tableVao, TABLE_INDICES.length), // Ground
+        new Shape(vec3.fromValues(0, 0, 0), 1, UP_VEC, 0, tableVao, TABLE_INDICES.length), // Ground
         new Shape(vec3.fromValues(0, 0.4, 0), 0.4, UP_VEC, 0, cubeVao, CUBE_INDICES.length), // Center
-        // new Shape(vec3.fromValues(1, 0.05, 1), 0.05, UP_VEC, 0, cubeVao, CUBE_INDICES.length),
-        // new Shape(vec3.fromValues(1, 0.1, -1), 0.1, UP_VEC, 0, cubeVao, CUBE_INDICES.length),
-        // new Shape(vec3.fromValues(-1, 0.15, 1), 0.15, UP_VEC, 0, cubeVao, CUBE_INDICES.length),
-        // new Shape(vec3.fromValues(-1, 0.2, -1), 0.2, UP_VEC, 0, cubeVao, CUBE_INDICES.length),
+        new Shape(vec3.fromValues(1, 0.05, 1), 0.05, UP_VEC, 0, cubeVao, CUBE_INDICES.length),
+        new Shape(vec3.fromValues(1, 0.1, -1), 0.1, UP_VEC, 0, cubeVao, CUBE_INDICES.length),
+        new Shape(vec3.fromValues(-1, 0.15, 1), 0.15, UP_VEC, 0, cubeVao, CUBE_INDICES.length),
+        new Shape(vec3.fromValues(-1, 0.2, -1), 0.2, UP_VEC, 0, cubeVao, CUBE_INDICES.length),
     ];
 
     const matView = mat4.create();
@@ -581,7 +436,8 @@ export function introTo3DDemo(mazeData) {
     // Render!
     let lastFrameTime = performance.now();
 
-    const cameraPOS = vec3.fromValues(0, 15, 0);
+    // const cameraPOS = vec3.fromValues((mazeData.size.COLS / 2) * MazeShape.cellSize, 20, (-mazeData.size.ROWS / 2) * MazeShape.cellSize);
+    const cameraPOS = vec3.fromValues(0, 20, 0);
     const cameraRot = [0, -Math.PI / 2];
 
     const maxR = Math.PI / 2; // * 0.95;
@@ -628,6 +484,7 @@ export function introTo3DDemo(mazeData) {
         timer = 10;
 
     const frame = function () {
+        if (mazeShape.test < 580) mazeData.shift();
         const thisFrameTime = performance.now();
         const dt = (thisFrameTime - lastFrameTime) / 1000;
         lastFrameTime = thisFrameTime;
@@ -667,11 +524,7 @@ export function introTo3DDemo(mazeData) {
 
         vec3.add(lookAtPos, cameraPOS, vec3.fromValues(Math.cos(cameraRot[0]) * cosY, Math.sin(cameraRot[1]), Math.sin(cameraRot[0]) * cosY));
 
-        // lookat(matView, /* pos= */ cameraPOS, /* lookAt= */ lookAtPos, /* up= */ vec3.fromValues(0, 1, 0), cameraRot[0]);
-
-        if (cameraPOS[0] != lookAtPos[0] || cameraPOS[2] != lookAtPos[2]) mat4.lookAt(matView, /* pos= */ cameraPOS, /* lookAt= */ lookAtPos, /* up= */ vec3.fromValues(0, 1, 0));
-        mat4.lookAt(matView, cameraPOS, lookAtPos, vec3.scale([], [Math.cos(cameraRot[0]), 0, Math.sin(cameraRot[0])], cameraPOS[1] < lookAtPos[1] ? -1 : 1));
-
+        lookat(matView, /* pos= */ cameraPOS, /* lookAt= */ lookAtPos, /* up= */ vec3.fromValues(0, 1, 0), cameraRot[0]);
         mat4.perspective(matProj, /* fovy= */ glMatrix.toRadian(90), /* aspectRatio= */ canvas.width / canvas.height, /* near, far= */ 0.1, 100.0);
 
         // in GLM:    matViewProj = matProj * matView
