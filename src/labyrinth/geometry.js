@@ -71,25 +71,45 @@ export const TABLE_INDICES = new Uint16Array([
 ]);
 
 export const WALL_VERTICES = (ROWS, COLS, cellSize, wallThickness) => new Float32Array([
-    -wallThickness, 1, -wallThickness,
-    -wallThickness, 1, wallThickness,
-    wallThickness, 1, wallThickness,
-    wallThickness, 1, -wallThickness,
+    -wallThickness, 1, -wallThickness, 0.5, 0.5, 0.5,
+    -wallThickness, 1, wallThickness, 0.5, 0.5, 0.5,
+    wallThickness, 1, wallThickness, 0.5, 0.5, 0.5,
+    wallThickness, 1, -wallThickness, 0.5, 0.5, 0.5,
 
-    -wallThickness, 1, -ROWS * cellSize - wallThickness,
-    -wallThickness, 1, -ROWS * cellSize + wallThickness,
-    wallThickness, 1, -ROWS * cellSize + wallThickness,
-    wallThickness, 1, -ROWS * cellSize - wallThickness,
+    -wallThickness, 1, -ROWS * cellSize - wallThickness, 1, 1, 1,
+    -wallThickness, 1, -ROWS * cellSize + wallThickness, 1, 1, 1,
+    wallThickness, 1, -ROWS * cellSize + wallThickness, 1, 1, 1,
+    wallThickness, 1, -ROWS * cellSize - wallThickness, 1, 1, 1,
     
-    COLS * cellSize + wallThickness, 1, -ROWS * cellSize - wallThickness,
-    COLS * cellSize + wallThickness, 1, -ROWS * cellSize + wallThickness,
-    COLS * cellSize - wallThickness, 1, -ROWS * cellSize + wallThickness,
-    COLS * cellSize - wallThickness, 1, -ROWS * cellSize - wallThickness,
+    COLS * cellSize + wallThickness, 1, -ROWS * cellSize - wallThickness, 0.5, 0.5, 0.5,
+    COLS * cellSize + wallThickness, 1, -ROWS * cellSize + wallThickness, 0.5, 0.5, 0.5,
+    COLS * cellSize - wallThickness, 1, -ROWS * cellSize + wallThickness, 0.5, 0.5, 0.5,
+    COLS * cellSize - wallThickness, 1, -ROWS * cellSize - wallThickness, 0.5, 0.5, 0.5,
     
-    COLS * cellSize + wallThickness, 1, - wallThickness,
-    COLS * cellSize + wallThickness, 1, wallThickness,
-    COLS * cellSize - wallThickness, 1, wallThickness,
-    COLS * cellSize - wallThickness, 1, - wallThickness
+    COLS * cellSize + wallThickness, 1, -wallThickness, 1, 1, 1,
+    COLS * cellSize + wallThickness, 1, wallThickness, 1, 1, 1,
+    COLS * cellSize - wallThickness, 1, wallThickness, 1, 1, 1,
+    COLS * cellSize - wallThickness, 1, -wallThickness, 1, 1, 1,
+
+    -wallThickness, 0, -wallThickness, 1, 1, 1,
+    -wallThickness, 0, wallThickness, 1, 1, 1,
+    wallThickness, 0, wallThickness, 1, 1, 1,
+    wallThickness, 0, -wallThickness, 1, 1, 1,
+
+    -wallThickness, 0, -ROWS * cellSize - wallThickness, 1, 1, 1,
+    -wallThickness, 0, -ROWS * cellSize + wallThickness, 1, 1, 1,
+    wallThickness, 0, -ROWS * cellSize + wallThickness, 1, 1, 1,
+    wallThickness, 0, -ROWS * cellSize - wallThickness, 1, 1, 1,
+    
+    COLS * cellSize + wallThickness, 0, -ROWS * cellSize - wallThickness, 1, 1, 1,
+    COLS * cellSize + wallThickness, 0, -ROWS * cellSize + wallThickness, 1, 1, 1,
+    COLS * cellSize - wallThickness, 0, -ROWS * cellSize + wallThickness, 1, 1, 1,
+    COLS * cellSize - wallThickness, 0, -ROWS * cellSize - wallThickness, 1, 1, 1,
+    
+    COLS * cellSize + wallThickness, 0, -wallThickness, 1, 1, 1,
+    COLS * cellSize + wallThickness, 0, wallThickness, 1, 1, 1,
+    COLS * cellSize - wallThickness, 0, wallThickness, 1, 1, 1,
+    COLS * cellSize - wallThickness, 0, -wallThickness, 1, 1, 1,
 
 ]);
 

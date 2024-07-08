@@ -25,7 +25,7 @@ const mem = new Uint32Array(wasm.instance.exports.memory.buffer);
 
 const ROWS = 10;
 const COLS = 10;
-// 2500
+console.log(ROWS * COLS * 12)
 
 const maze_struct = wasm.instance.exports.createMaze(ROWS, COLS);
 
@@ -84,21 +84,21 @@ try {
 
 window.onkeypress = (e) => e.code == "KeyF" && maze.shift();
 
-setInterval(function () {
-    maze.shift()
-    // if (state == REST && huntCountdown-- <= 0) {
-    //     state = HUNT;
-    // }
-    // let [r, c] = maze.origin;
-    // if (curR == null || state == REST) wasm.instance.exports.shiftOrigin(maze_struct, ROWS, COLS);
-    // else wasm.instance.exports.shiftOriginToPoint(maze_struct, ROWS, COLS, curR, curC);
-    // if (r == curR && c == curC) {
-    //     state = REST;
-    //     huntCountdown = 1500;
-    //     randR = Math.floor(Math.random() * ROWS);
-    //     randC = Math.floor(Math.random() * COLS);
-    // }
+// setInterval(function () {
+//     maze.shift()
+//     // if (state == REST && huntCountdown-- <= 0) {
+//     //     state = HUNT;
+//     // }
+//     // let [r, c] = maze.origin;
+//     // if (curR == null || state == REST) wasm.instance.exports.shiftOrigin(maze_struct, ROWS, COLS);
+//     // else wasm.instance.exports.shiftOriginToPoint(maze_struct, ROWS, COLS, curR, curC);
+//     // if (r == curR && c == curC) {
+//     //     state = REST;
+//     //     huntCountdown = 1500;
+//     //     randR = Math.floor(Math.random() * ROWS);
+//     //     randC = Math.floor(Math.random() * COLS);
+//     // }
 
-    // [r, c] = maze.origin;
+//     // [r, c] = maze.origin;
 
-}, 100);
+// }, 100);

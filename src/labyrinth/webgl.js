@@ -75,33 +75,60 @@ export class MazeShape {
     lastMaze;
     curMaze;
     stretchArr;
-    constructor(gl, mazeData, posAttrib) {
+    constructor(gl, mazeData, posAttrib, colorAttrib) {
         this.mazeData = mazeData;
         this.gl = gl;
         this.vertexBuf = this.createBuffer();
         this.indexBuf = this.createBuffer();
         this.vao = this.createMazeVao(posAttrib);
-        this.wallVao = this.createMazeWallVao(posAttrib);
+        this.wallVao = this.createMazeWallVao(posAttrib, colorAttrib);
         this.pos = [(-this.mazeData.size.ROWS * MazeShape.cellSize) / 2, 0, (-this.mazeData.size.COLS * MazeShape.cellSize) / 2];
 
         this.curMaze = mazeData.maze;
+        const { ROWS, COLS } = this.mazeData.size;
 
         const verts = [];
-        const { ROWS, COLS } = this.mazeData.size;
+        // this.verticies = new Float32Array(ROWS * COLS * 12 * 2);
+        let i = 0;
+        const addVert = (x, y, z) => {
+            i+=1;
+            verts.push(x, y, z);
+            // this.verticies[i++] = x;
+            // this.verticies[i++] = 2;
+            // this.verticies[i++] = z;
+        };
+        // const addVert = (x, z) => {
+        //     this.verticies[i] = this.verticies[i + groundOffset] = x;
+        //     i++;
+        //     this.verticies[i] = this.verticies[i + groundOffset] = 1;
+        //     i++;
+        //     this.verticies[i] = this.verticies[i + groundOffset] = z;
+        //     i++;
+        // };
         const { cellSize, wallThickness } = MazeShape;
         for (let r = 0; r < ROWS; r++) {
             for (let c = 0; c < COLS; c++) {
                 const cellPos = [c * cellSize, -r * cellSize];
-                verts.push(cellPos[0] + wallThickness, 1, cellPos[1] - wallThickness);
-                verts.push(cellPos[0] + cellSize - wallThickness, 1, cellPos[1] - wallThickness);
-                verts.push(cellPos[0] + cellSize - wallThickness, 1, cellPos[1] - cellSize + wallThickness);
-                verts.push(cellPos[0] + wallThickness, 1, cellPos[1] - cellSize + wallThickness);
+                addVert(cellPos[0] + wallThickness, 1, cellPos[1] - wallThickness);
+                addVert(cellPos[0] + cellSize - wallThickness, 1, cellPos[1] - wallThickness);
+                addVert(cellPos[0] + cellSize - wallThickness, 1, cellPos[1] - cellSize + wallThickness);
+                addVert(cellPos[0] + wallThickness, 1, cellPos[1] - cellSize + wallThickness);
+            }
+        }
+        const groundOffset = (this.groundOffset = i);
+        for (let r = 0; r < ROWS; r++) {
+            for (let c = 0; c < COLS; c++) {
+                const cellPos = [c * cellSize, -r * cellSize];
+                addVert(cellPos[0] + wallThickness, 0, cellPos[1] - wallThickness);
+                addVert(cellPos[0] + cellSize - wallThickness, 0, cellPos[1] - wallThickness);
+                addVert(cellPos[0] + cellSize - wallThickness, 0, cellPos[1] - cellSize + wallThickness);
+                addVert(cellPos[0] + wallThickness, 0, cellPos[1] - cellSize + wallThickness);
             }
         }
         this.verticies = new Float32Array(verts);
         this.updateVertexBuffer();
-        console.log((window.mazeShape = this));
-        this.indicies = new Uint16Array(ROWS * COLS * 6);
+        console.log((window.mazeShape = this), i);
+        this.indicies = new Uint16Array(ROWS * COLS * 12 * 2);
         this.stretchArr = new Array(COLS);
         window.addEventListener("keydown", (e) => e.code == "KeyG" && this.initMaze());
         this.initMaze();
@@ -132,8 +159,8 @@ export class MazeShape {
         }
         return (this.indicies[this.numInds++] = val);
     }
-    getInd(row, col) {
-        return (row * this.mazeData.size.COLS + col) * 4;
+    getInd(row, col, low) {
+        return (row * this.mazeData.size.COLS + col) * 4 + (low ? this.groundOffset : 0);
     }
     fromInd(ind) {
         const cols = this.mazeData.size.COLS;
@@ -188,6 +215,11 @@ export class MazeShape {
                         downRight = this.getInd(r, stretch - 1) + 1;
                     }
                     this.addFace(upLeft, upRight, downRight, downLeft);
+
+                    this.addFace(upRight, upLeft, upLeft + this.groundOffset, upRight + this.groundOffset);
+                    this.addFace(downLeft, downRight, downRight + this.groundOffset, downLeft + this.groundOffset);
+                    this.addFace(upLeft, downLeft, downLeft + this.groundOffset, upLeft + this.groundOffset);
+                    this.addFace(downRight, upRight, upRight + this.groundOffset, downRight + this.groundOffset);
                 }
                 if (c + 1 < COLS && !this.canConnectRight(r, c) && r >= stretchArr[c]) {
                     stretchArr[c] = r;
@@ -205,6 +237,11 @@ export class MazeShape {
                         downRight = this.getInd(stretchArr[c] - 1, c + 1) + 3;
                     }
                     this.addFace(upLeft, upRight, downRight, downLeft);
+
+                    this.addFace(upRight, upLeft, upLeft + this.groundOffset, upRight + this.groundOffset);
+                    this.addFace(downLeft, downRight, downRight + this.groundOffset, downLeft + this.groundOffset);
+                    this.addFace(upLeft, downLeft, downLeft + this.groundOffset, upLeft + this.groundOffset);
+                    this.addFace(downRight, upRight, upRight + this.groundOffset, downRight + this.groundOffset);
                 }
             }
         }
@@ -269,7 +306,7 @@ export class MazeShape {
                         downRight;
                     let remove;
                     if ((remove = this.findInd(upLeft, downLeft)) < this.numInds) {
-                        trashInds.push(this.findInd(upLeft, downLeft)); // remove left or whole row
+                        trashInds.push(remove); // remove left or whole row
                     }
 
                     if (canUp) {
@@ -331,8 +368,7 @@ export class MazeShape {
                         }
                     } else {
                         // remove bottom if valid and has wall
-                        if (r + 1 < ROWS && !this.canConnectRight(r + 1, c, this.lastMaze))
-                            trashInds.push(this.findInd2(this.getInd(r, c) + 2, this.getInd(r, c + 1) + 3));
+                        if (r + 1 < ROWS && !this.canConnectRight(r + 1, c, this.lastMaze)) trashInds.push(this.findInd2(this.getInd(r, c) + 2, this.getInd(r, c + 1) + 3));
                         // add column
                         stretch = topR;
                         while (stretch < ROWS && !this.canConnectRight(stretch, c)) stretch++;
@@ -422,7 +458,15 @@ export class MazeShape {
     }
     updateIndexBuffer() {
         this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, this.indexBuf);
+        // const inds = this.indicies.slice();
+        // for (let i = 0; i < this.numInds; i++) {
+        //     if (this.verticies[inds[i]] != this.verticies[inds[i] + this.groundOffset]) console.log(inds[i]);
+        //     // this.verticies[inds[i] + this.groundOffset] = this.verticies[inds[i]];
+        //     inds[i] += this.groundOffset;
+        // }
+
         this.gl.bufferData(this.gl.ELEMENT_ARRAY_BUFFER, this.indicies, this.gl.STATIC_DRAW);
+
         this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, null);
     }
     createMazeVao(posAttrib) {
@@ -448,7 +492,7 @@ export class MazeShape {
 
         return vao;
     }
-    createMazeWallVao(posAttrib) {
+    createMazeWallVao(posAttrib, colorAttrib) {
         const vao = this.gl.createVertexArray();
         if (!vao) {
             showError("Failed to create VAO");
@@ -458,19 +502,22 @@ export class MazeShape {
         this.gl.bindVertexArray(vao);
 
         this.gl.enableVertexAttribArray(posAttrib);
+        this.gl.enableVertexAttribArray(colorAttrib);
 
         const { ROWS, COLS } = this.mazeData.size;
         const { cellSize, wallThickness } = MazeShape;
 
         const vertexBuf = this.createBuffer();
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, vertexBuf);
-        this.gl.bufferData(this.gl.ARRAY_BUFFER, WALL_VERTICES(ROWS, COLS, cellSize, wallThickness), this.gl.STATIC_DRAW);
+        const verts = WALL_VERTICES(ROWS, COLS, cellSize, wallThickness);
+        console.log(verts);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, verts, this.gl.STATIC_DRAW);
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, null);
         const indexBuf = this.createBuffer();
         this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, indexBuf);
         this.gl.bufferData(
             this.gl.ELEMENT_ARRAY_BUFFER,
-            new Uint16Array([
+            new Uint8Array([
                 1, 2, 7, 1, 7, 4,
 
                 1, 13, 12, 1, 12, 0,
@@ -478,14 +525,23 @@ export class MazeShape {
                 14, 13, 8, 14, 8, 11,
 
                 5, 9, 8, 5, 8, 4,
+
+                6, 3, 19, 6, 19, 22,
+
+                3, 15, 31, 3, 31, 19,
+
+                15, 10, 26, 15, 26, 31,
+
+                10, 6, 22, 10, 22, 26,
             ]),
             this.gl.STATIC_DRAW
         );
         this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, null);
 
-        // Interleaved format: (x, y, z) (all f32)
+        // Interleaved format: (x, y, z, r, g, b) (all f32)
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, vertexBuf);
-        this.gl.vertexAttribPointer(posAttrib, 3, this.gl.FLOAT, false, 3 * Float32Array.BYTES_PER_ELEMENT, 0);
+        this.gl.vertexAttribPointer(posAttrib, 3, this.gl.FLOAT, false, 6 * Float32Array.BYTES_PER_ELEMENT, 0);
+        this.gl.vertexAttribPointer(colorAttrib, 3, this.gl.FLOAT, false, 6 * Float32Array.BYTES_PER_ELEMENT, 3 * Float32Array.BYTES_PER_ELEMENT);
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, null);
 
         this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, indexBuf);
@@ -495,7 +551,7 @@ export class MazeShape {
 
         return vao;
     }
-    draw(matWorldUniform) {
+    draw(matWorldUniform, mazeCheckUniform) {
         if (this.mazeData.hasUpdate) this.updateMaze();
         quat.setAxisAngle(this.rotation, MazeShape.rotationAxis, MazeShape.rotationAngle);
         vec3.set(this.scaleVec, MazeShape.scale, MazeShape.scale, MazeShape.scale);
@@ -503,10 +559,12 @@ export class MazeShape {
         mat4.fromRotationTranslationScale(this.matWorld, /* rotation= */ this.rotation, /* position= */ this.pos, /* scale= */ this.scaleVec);
 
         this.gl.uniformMatrix4fv(matWorldUniform, false, this.matWorld);
+        this.gl.uniform1i(mazeCheckUniform, 1);
         this.gl.bindVertexArray(this.vao);
         this.gl.drawElements(this.gl.TRIANGLES, this.numInds, this.gl.UNSIGNED_SHORT, 0);
+        this.gl.uniform1i(mazeCheckUniform, 0);
         this.gl.bindVertexArray(this.wallVao);
-        this.gl.drawElements(this.gl.TRIANGLES, 24, this.gl.UNSIGNED_SHORT, 0);
+        this.gl.drawElements(this.gl.TRIANGLES, 48, this.gl.UNSIGNED_BYTE, 0);
         this.gl.bindVertexArray(null);
     }
 }
@@ -555,7 +613,7 @@ export function introTo3DDemo(mazeData) {
 
     const cubeVao = create3dPosColorInterleavedVao(gl, cubeVertices, cubeIndices, posAttrib, colorAttrib);
     const tableVao = create3dPosColorInterleavedVao(gl, tableVertices, tableIndices, posAttrib, colorAttrib);
-    const mazeShape = new MazeShape(gl, mazeData, posAttrib);
+    const mazeShape = new MazeShape(gl, mazeData, posAttrib, colorAttrib);
 
     if (!cubeVao || !tableVao) {
         showError(`Failed to create VAOs: cube=${!!cubeVao} table=${!!tableVao}`);
@@ -581,7 +639,7 @@ export function introTo3DDemo(mazeData) {
     // Render!
     let lastFrameTime = performance.now();
 
-    const cameraPOS = vec3.fromValues(0, 15, 0);
+    const cameraPOS = vec3.fromValues(0, 12, 0);
     const cameraRot = [0, -Math.PI / 2];
 
     const maxR = Math.PI / 2; // * 0.95;
@@ -691,8 +749,7 @@ export function introTo3DDemo(mazeData) {
         gl.uniform1i(mazeCheckUniform, 0);
 
         shapes.forEach((shape) => shape.draw(gl, matWorldUniform));
-        gl.uniform1i(mazeCheckUniform, 1);
-        mazeShape.draw(matWorldUniform);
+        mazeShape.draw(matWorldUniform, mazeCheckUniform);
         requestAnimationFrame(frame);
     };
     requestAnimationFrame(frame);
