@@ -11,8 +11,13 @@ uniform mat4 matViewProj;
 uniform bool mazeCheck;
 
 void main() {
-  if (mazeCheck) fragmentColor = vec3(1, 1 ,1);
-  else fragmentColor = vertexColor;
 
-  gl_Position = matViewProj * matWorld * vec4(vertexPosition, 1.0);
+    fragmentColor = vertexColor;
+    if(mazeCheck) {
+        fragmentColor = vec3(1, 1, 1);
+        if(vertexPosition.y == 0.0f)
+            fragmentColor *= 0.5f;
+    }
+
+    gl_Position = matViewProj * matWorld * vec4(vertexPosition, 1.0f);
 }
