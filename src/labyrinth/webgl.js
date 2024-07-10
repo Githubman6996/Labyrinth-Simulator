@@ -2,7 +2,9 @@ import { CUBE_INDICES, CUBE_VERTICES, TABLE_INDICES, TABLE_VERTICES, WALL_VERTIC
 import { createProgram, createStaticIndexBuffer, createStaticVertexBuffer, getContext, showError } from "./utils.js";
 const { glMatrix, mat4, quat, vec3 } = window.glMatrix;
 
-document.querySelector("#maze").remove();
+let crosshair = document.querySelector("#maze");
+crosshair.id = "";
+crosshair.className = "crosshair";
 
 const canvas = document.querySelector("canvas");
 canvas.style = "";
@@ -18,21 +20,20 @@ const fragmentShaderSourceCode = await fetch("src/labyrinth/shaders/fragment.gls
 
 class Shape {
     matWorld = mat4.create();
-    scaleVec = vec3.create();
+    // scaleVec = vec3.create();
     rotation = quat.create();
 
     constructor(pos, scale, rotationAxis, rotationAngle, vao, numIndices) {
         this.pos = pos;
-        this.scale = scale;
+        this.scaleVec = scale;
         this.rotationAxis = rotationAxis;
         this.rotationAngle = rotationAngle;
         this.vao = vao;
         this.numIndices = numIndices;
     }
 
-    draw(gl, matWorldUniform, idk) {
+    draw(gl, matWorldUniform) {
         quat.setAxisAngle(this.rotation, this.rotationAxis, this.rotationAngle);
-        vec3.set(this.scaleVec, this.scale, this.scale, this.scale);
 
         mat4.fromRotationTranslationScale(this.matWorld, /* rotation= */ this.rotation, /* position= */ this.pos, /* scale= */ this.scaleVec);
 
@@ -44,7 +45,7 @@ class Shape {
 }
 
 export class MazeShape {
-    static scale = 1;
+    static scale = 3;
     static rotationAxis = [0, 1, 0];
     static rotationAngle = 0;
 
@@ -76,7 +77,7 @@ export class MazeShape {
         this.indexBuf = this.createBuffer();
         this.vao = this.createMazeVao(posAttrib);
         this.wallVao = this.createMazeWallVao(posAttrib, colorAttrib);
-        // this.pos = [(-this.mazeData.size.ROWS * MazeShape.cellSize * MazeShape.scale) / 2, 0, (-this.mazeData.size.COLS * MazeShape.cellSize * MazeShape.scale) / 2];
+        // this.pos = [(this.mazeData.size.ROWS * MazeShape.cellSize * MazeShape.scale) / 2, 0, (-this.mazeData.size.COLS * MazeShape.cellSize * MazeShape.scale) / 2];
         this.pos = [0, 0, 0];
 
         this.curMaze = mazeData.maze;
@@ -243,19 +244,6 @@ export class MazeShape {
         // if (i == this.numInds) console.log("ruh roh 2");
         return i;
     }
-    findWall(first, last) {
-        let i;
-        for (i = 0; i < this.indicies.length && this.indicies[i] != this.indicies[i + 1]; i += 6) if (this.indicies[i] == first && this.indicies[i + 3] == first && this.indicies[i + 5] == last + this.groundOffset) return i;
-        // if (i == this.numInds) console.log("ruh roh 2");
-        return i;
-    }
-    findWall2(first, second) {
-        let i;
-        for (i = 0; i < this.indicies.length && this.indicies[i] != this.indicies[i + 1]; i += 6)
-            if (this.indicies[i] == first && this.indicies[i + 3] == first && this.indicies[i + 1] == second && this.indicies[i + 2] == second + this.groundOffset) return i;
-        // if (i == this.numInds) console.log("ruh roh 2");
-        return i;
-    }
     test = 0;
     updateMaze() {
         ++this.test;
@@ -279,6 +267,9 @@ export class MazeShape {
             size: { ROWS, COLS },
             origin,
         } = this.mazeData;
+
+        // console.log(origin);
+
         const faces = [];
         const addFace = (a, b, c, d) => {
             if (a == b) return;
@@ -385,9 +376,8 @@ export class MazeShape {
 
         trashInds.sort((a, b) => a - b);
 
-        for (const ind of trashInds) 
-            for (let i = 0; i < 30; i++) this.indicies[ind + i] = 0;
-        
+        for (const ind of trashInds) for (let i = 0; i < 30; i++) this.indicies[ind + i] = 0;
+
         while (i < trashInds.length && k < faces.length) {
             const ind = trashInds[i++];
             for (let i = 0; i < 30; i++) this.indicies[ind + i] = faces[k++];
@@ -535,6 +525,14 @@ export class MazeShape {
 Math.TAO = Math.PI * 2;
 
 export function introTo3DDemo(mazeData) {
+    const { ROWS, COLS } = mazeData.size;
+    const { cellSize, wallThickness, scale } = MazeShape;
+    const scaledWall = wallThickness * scale;
+    const scaledCell = cellSize * scale;
+    const wallToCellRatio = parseFloat((scaledWall / scaledCell).toPrecision(10));
+    const halfC = ((COLS * cellSize) / 2) * scale;
+    const halfR = ((ROWS * cellSize) / 2) * scale;
+
     const canvas = document.querySelector("canvas");
     if (!canvas || !(canvas instanceof HTMLCanvasElement)) {
         showError("Could not get Canvas reference");
@@ -586,13 +584,15 @@ export function introTo3DDemo(mazeData) {
 
     const UP_VEC = vec3.fromValues(0, 1, 0);
     const shapes = [
-        new Shape(vec3.fromValues(0, 0, 0), 10, UP_VEC, 0, tableVao, TABLE_INDICES.length), // Ground
-        new Shape(vec3.fromValues(0, 0.5, 0), 0.5, UP_VEC, 0, cubeVao, CUBE_INDICES.length), // Center
+        new Shape(vec3.fromValues(0, 0, 0), [(COLS / 2) * scaledCell, 10, (ROWS / 2) * scaledCell], UP_VEC, 0, tableVao, TABLE_INDICES.length), // Ground
+        new Shape(vec3.fromValues(0, 1, 0), [0.5, 1, 0.5], UP_VEC, 0, cubeVao, CUBE_INDICES.length), // Center
         // new Shape(vec3.fromValues(1, 0.05, 1), 0.05, UP_VEC, 0, cubeVao, CUBE_INDICES.length),
         // new Shape(vec3.fromValues(1, 0.1, -1), 0.1, UP_VEC, 0, cubeVao, CUBE_INDICES.length),
         // new Shape(vec3.fromValues(-1, 0.15, 1), 0.15, UP_VEC, 0, cubeVao, CUBE_INDICES.length),
         // new Shape(vec3.fromValues(-1, 0.2, -1), 0.2, UP_VEC, 0, cubeVao, CUBE_INDICES.length),
     ];
+
+    // shapes[1].scaleVec[1] = 1;
 
     const matView = mat4.create();
     const matProj = mat4.create();
@@ -603,13 +603,21 @@ export function introTo3DDemo(mazeData) {
     // Render!
     let lastFrameTime = performance.now();
 
-    const cameraPOS = vec3.fromValues(0, 10, 0);
-    const cameraRot = [0, -Math.PI / 2];
+    // this.pos = [(this.mazeData.size.ROWS * MazeShape.cellSize * MazeShape.scale) / 2, 0, (-this.mazeData.size.COLS * MazeShape.cellSize * MazeShape.scale) / 2];
+
+    const cameraPOS = vec3.fromValues(-(COLS * MazeShape.cellSize * MazeShape.scale) / 2, 1.5, (ROWS * MazeShape.cellSize * MazeShape.scale) / 2);
+    cameraPOS[0] += 1;
+    cameraPOS[2] -= 1;
+
+    window.pos = cameraPOS;
+    window.bruh = [0, 0];
+    const cameraRot = [0, 0];
 
     const maxR = Math.PI / 2; // * 0.95;
 
-    const sensitivity = 6;
-    let cameraSpeed = 6;
+    const sensitivity = 0.1;
+    let cameraSpeed = 3;
+    let zoom = 0;
 
     canvas.addEventListener("click", (e) => {
         canvas.requestPointerLock({
@@ -617,8 +625,8 @@ export function introTo3DDemo(mazeData) {
         });
         canvas.onmousemove = (e) => {
             if (document.pointerLockElement != canvas) return;
-            cameraRot[0] += glMatrix.toRadian(e.movementX) / sensitivity;
-            cameraRot[1] -= glMatrix.toRadian(e.movementY) / sensitivity;
+            cameraRot[0] += glMatrix.toRadian(e.movementX) * sensitivity;
+            cameraRot[1] -= glMatrix.toRadian(e.movementY) * sensitivity;
 
             cameraRot[0] %= Math.TAO;
             while (cameraRot[0] < 0) cameraRot[0] += Math.TAO;
@@ -626,7 +634,8 @@ export function introTo3DDemo(mazeData) {
             else if (cameraRot[1] > maxR) cameraRot[1] = maxR;
         };
         canvas.onmousewheel = (e) => {
-            cameraSpeed = Math.max(0, cameraSpeed - e.deltaY / 500);
+            // cameraSpeed = Math.max(0, cameraSpeed - e.deltaY / 500);
+            zoom = Math.max(0, zoom + e.deltaY / 100);
         };
     });
 
@@ -647,7 +656,25 @@ export function introTo3DDemo(mazeData) {
 
     let frameCheck = 0,
         average = 0,
-        timer = 10;
+        timer = 10,
+        lastAvg = 60;
+
+    const isValidCell = (row, col) => {
+        return row >= 0 && row < ROWS && col >= 0 && col < COLS;
+    };
+    const getCell = (row, col, maze) => {
+        if (isValidCell(row, col)) return maze[row * COLS + col];
+    };
+
+    const canConnectRight = (row, col, maze) => {
+        return getCell(row, col, maze) === 1 || getCell(row, col + 1, maze) === 3;
+    };
+
+    const canConnectUp = (row, col, maze) => {
+        return getCell(row, col, maze) === 0 || getCell(row - 1, col, maze) === 2;
+    };
+    const transformToMaze = (r, c) => [r / -scaledCell, c / scaledCell];
+    const transformToMazeInverse = (r, c) => [r * -scaledCell, c * scaledCell];
 
     const frame = function () {
         const thisFrameTime = performance.now();
@@ -658,41 +685,177 @@ export function introTo3DDemo(mazeData) {
         average += 1 / dt;
 
         if (++frameCheck % timer == 0) {
-            fps.innerHTML = Math.floor(average / timer);
+            if (lastAvg != (lastAvg = Math.floor(average / timer))) fps.innerHTML = lastAvg;
             frameCheck = timer;
             average = 0;
         }
 
+        const cosPitch = Math.cos(cameraRot[0]) * dtSpeed;
+        const sinPitch = Math.sin(cameraRot[0]) * dtSpeed;
+
+        let moved = false,
+            dx = 0,
+            dz = 0;
+
         if (pressed.Space) cameraPOS[1] += dtSpeed;
         if (pressed.ShiftLeft) cameraPOS[1] -= dtSpeed;
         if (pressed.KeyW && !pressed.KeyS) {
-            cameraPOS[0] += Math.cos(cameraRot[0]) * dtSpeed;
-            cameraPOS[2] += Math.sin(cameraRot[0]) * dtSpeed;
+            cameraPOS[0] += cosPitch;
+            cameraPOS[2] += sinPitch;
+            dx += cosPitch;
+            dz += sinPitch;
+            moved = true;
         }
         if (pressed.KeyA && !pressed.KeyD) {
-            cameraPOS[0] += Math.cos(cameraRot[0] - Math.PI / 2) * dtSpeed;
-            cameraPOS[2] += Math.sin(cameraRot[0] - Math.PI / 2) * dtSpeed;
+            cameraPOS[0] += sinPitch;
+            cameraPOS[2] -= cosPitch;
+            dx += sinPitch;
+            dz -= cosPitch;
+            moved = true;
         }
         if (pressed.KeyS && !pressed.KeyW) {
-            cameraPOS[0] -= Math.cos(cameraRot[0]) * dtSpeed;
-            cameraPOS[2] -= Math.sin(cameraRot[0]) * dtSpeed;
+            cameraPOS[0] -= cosPitch;
+            cameraPOS[2] -= sinPitch;
+            dx -= cosPitch;
+            dz -= sinPitch;
+            moved = true;
         }
         if (pressed.KeyD && !pressed.KeyA) {
-            cameraPOS[0] += Math.cos(cameraRot[0] + Math.PI / 2) * dtSpeed;
-            cameraPOS[2] += Math.sin(cameraRot[0] + Math.PI / 2) * dtSpeed;
+            cameraPOS[0] -= sinPitch;
+            cameraPOS[2] += cosPitch;
+            dx -= sinPitch;
+            dz += cosPitch;
+            moved = true;
+        }
+
+        // Collision checks
+        if (moved) {
+            const { maze } = mazeData;
+
+            const [curRow, curCol] = [cameraPOS[2] - halfR, cameraPOS[0] + halfC];
+            mazeData.setPos(([...bruh] = transformToMaze(curRow, curCol).map(Math.floor)));
+
+            const wallRed = !canConnectUp(bruh[0], bruh[1], maze);
+            const wallBlue = !canConnectRight(bruh[0], bruh[1], maze);
+            const wallCyan = !canConnectUp(bruh[0] + 1, bruh[1], maze);
+            const wallYellow = !canConnectRight(bruh[0], bruh[1] - 1, maze);
+
+            let [red, blue] = transformToMaze(curRow + 0.5, curCol + 0.5);
+            let [cyan, yellow] = transformToMaze(curRow - 0.5, curCol - 0.5);
+
+            // const blueInThisWall = blue - bruh[1] < 1 && parseFloat((blue - bruh[1]).toPrecision(5)) > 1 - wallToCellRatio;
+            // const blueInNextWall = blue - bruh[1] > 1 && parseFloat((blue - bruh[1] - 1).toPrecision(5)) < wallToCellRatio;
+            // const redInThisWall = red - bruh[0] > 0 && parseFloat((red - bruh[0]).toPrecision(5)) < wallToCellRatio;
+            // const redInNextWall = red - bruh[0] < 0 && parseFloat((red - bruh[0] + 1).toPrecision(5)) > 1 - wallToCellRatio;
+            // const yellowInThisWall = yellow - bruh[1] > 0 && parseFloat((yellow - bruh[1]).toPrecision(5)) < wallToCellRatio;
+            // const yellowInNextWall = yellow - bruh[1] < 0 && parseFloat((yellow - bruh[1] + 1).toPrecision(5)) > 1 - wallToCellRatio;
+            // const cyanInThisWall = cyan - bruh[0] < 1 && parseFloat((cyan - bruh[0]).toPrecision(5)) > 1 - wallToCellRatio;
+            // const cyanInNextWall = cyan - bruh[0] > 1 && parseFloat((cyan - bruh[0] - 1).toPrecision(5)) < wallToCellRatio;
+
+            // const blueInWall = blueInThisWall || blueInNextWall;
+            // const redInWall = redInThisWall || redInNextWall;
+            // const yellowInWall = yellowInThisWall || yellowInNextWall;
+            // const cyanInWall = cyanInThisWall || cyanInNextWall;
+
+            const getCollisions = (red, blue, cyan, yellow) => {
+                const blueInThisWall = blue - bruh[1] < 1 && parseFloat((blue - bruh[1]).toPrecision(5)) > 1 - wallToCellRatio;
+                const blueInNextWall = blue - bruh[1] > 1 && parseFloat((blue - bruh[1] - 1).toPrecision(5)) < wallToCellRatio;
+                const redInThisWall = red - bruh[0] > 0 && parseFloat((red - bruh[0]).toPrecision(5)) < wallToCellRatio;
+                const redInNextWall = red - bruh[0] < 0 && parseFloat((red - bruh[0] + 1).toPrecision(5)) > 1 - wallToCellRatio;
+                const yellowInThisWall = yellow - bruh[1] > 0 && parseFloat((yellow - bruh[1]).toPrecision(5)) < wallToCellRatio;
+                const yellowInNextWall = yellow - bruh[1] < 0 && parseFloat((yellow - bruh[1] + 1).toPrecision(5)) > 1 - wallToCellRatio;
+                const cyanInThisWall = cyan - bruh[0] < 1 && parseFloat((cyan - bruh[0]).toPrecision(5)) > 1 - wallToCellRatio;
+                const cyanInNextWall = cyan - bruh[0] > 1 && parseFloat((cyan - bruh[0] - 1).toPrecision(5)) < wallToCellRatio;
+
+                const blueInWall = blueInThisWall || blueInNextWall;
+                const redInWall = redInThisWall || redInNextWall;
+                const yellowInWall = yellowInThisWall || yellowInNextWall;
+                const cyanInWall = cyanInThisWall || cyanInNextWall;
+                const blueIsYellow = Math.floor(blue) == Math.floor(yellow);
+                const redIsCyan = Math.floor(red) == Math.floor(cyan);
+
+                const blueCollision = blueInWall && (!canConnectRight(bruh[0], bruh[1], maze) || redInWall || cyanInWall || !redIsCyan);
+                const redCollision = redInWall && (!canConnectUp(bruh[0], bruh[1], maze) || blueInWall || yellowInWall || !blueIsYellow);
+                const yellowCollision = yellowInWall && (!canConnectRight(bruh[0], bruh[1] - 1, maze) || redInWall || cyanInWall || !redIsCyan);
+                const cyanCollision = cyanInWall && (!canConnectUp(bruh[0] + 1, bruh[1], maze) || blueInWall || yellowInWall || !blueIsYellow);
+                return { blueCollision, redCollision, yellowCollision, cyanCollision };
+            };
+
+            let { blueCollision, redCollision, yellowCollision, cyanCollision } = getCollisions(red, blue, cyan, yellow);
+
+            const [tdz, tdx] = transformToMaze(dz, dx);
+            const [redC, blueC] = transformToMazeInverse(red - bruh[0] - wallToCellRatio, blue - bruh[1] - 1 + wallToCellRatio);
+            const [cyanC, yellowC] = transformToMazeInverse(cyan - bruh[0] - 1 + wallToCellRatio, yellow - bruh[1] - wallToCellRatio);
+
+            let prioritizeCols;
+
+            const xWall = tdx < 0 ? wallYellow : wallBlue;
+            const zWall = tdz < 0 ? wallRed : wallCyan;
+
+            if (xWall && !zWall) prioritizeCols = true;
+            else if (!xWall && zWall) prioritizeCols = false;
+            else prioritizeCols = Math.abs(tdx < 0 ? yellowC : blueC) < Math.abs(tdz < 0 ? redC : cyanC);
+
+            // console.log(
+            //     prioritizeCols, Math.sign(tdz), xWall, zWall,
+            //     bruh,
+            //     { wallBlue, wallRed, wallYellow, wallCyan },
+            //     { blueCollision, redCollision, yellowCollision, cyanCollision },
+            //     { blueInWall, redInWall, yellowInWall, cyanInWall },
+            // );
+
+            if (prioritizeCols) {
+                if (tdx > 0) {
+                    if (blueCollision) {
+                        const snapback = blue - bruh[1] - 1 + wallToCellRatio;
+                        blue -= snapback;
+                        cameraPOS[0] -= snapback * scaledCell;
+                        ({ redCollision, cyanCollision } = getCollisions(red, blue, cyan, yellow));
+                    }
+                } else if (yellowCollision) {
+                    const snapback = yellow - bruh[1] - wallToCellRatio;
+                    yellow -= snapback;
+                    cameraPOS[0] -= snapback * scaledCell;
+                    ({ redCollision, cyanCollision } = getCollisions(red, blue, cyan, yellow));
+                }
+                if (tdz > 0) cyanCollision && (cameraPOS[2] += (cyan - bruh[0] - 1 + wallToCellRatio) * scaledCell);
+                else redCollision && (cameraPOS[2] += (red - bruh[0] - wallToCellRatio) * scaledCell);
+            } else {
+                if (tdz > 0) {
+                    if (cyanCollision) {
+                        const snapback = cyan - bruh[0] - 1 + wallToCellRatio;
+                        cyan -= snapback;
+                        cameraPOS[2] += snapback * scaledCell;
+                        ({ blueCollision, yellowCollision } = getCollisions(red, blue, cyan, yellow));
+                    }
+                } else if (redCollision) {
+                    const snapback = red - bruh[0] - wallToCellRatio;
+                    red -= snapback;
+                    cameraPOS[2] += snapback * scaledCell;
+                    ({ blueCollision, yellowCollision } = getCollisions(red, blue, cyan, yellow));
+                }
+                if (tdx > 0) blueCollision && (cameraPOS[0] -= (blue - bruh[1] - 1 + wallToCellRatio) * scaledCell);
+                else yellowCollision && (cameraPOS[0] -= (yellow - bruh[1] - wallToCellRatio) * scaledCell);
+            }
         }
 
         //
         // Update
 
-        const cosY = Math.cos(cameraRot[1]);
+        shapes[1].pos[0] = cameraPOS[0];
+        shapes[1].pos[2] = cameraPOS[2];
 
-        vec3.add(lookAtPos, cameraPOS, vec3.fromValues(Math.cos(cameraRot[0]) * cosY, Math.sin(cameraRot[1]), Math.sin(cameraRot[0]) * cosY));
+        const cosY = Math.cos(cameraRot[1]);
+        const cameraVec = vec3.fromValues(Math.cos(cameraRot[0]) * cosY, Math.sin(cameraRot[1]), Math.sin(cameraRot[0]) * cosY);
+
+        vec3.add(lookAtPos, cameraPOS, cameraVec);
 
         // lookat(matView, /* pos= */ cameraPOS, /* lookAt= */ lookAtPos, /* up= */ vec3.fromValues(0, 1, 0), cameraRot[0]);
 
         const up = cameraPOS[0] != lookAtPos[0] || cameraPOS[2] != lookAtPos[2] ? vec3.fromValues(0, 1, 0) : vec3.scale([], [Math.cos(cameraRot[0]), 0, Math.sin(cameraRot[0])], cameraPOS[1] < lookAtPos[1] ? -1 : 1);
         mat4.lookAt(matView, /* pos= */ cameraPOS, /* lookAt= */ lookAtPos, /* up= */ up);
+
+        mat4.translate(matView, matView, vec3.scale([], cameraVec, zoom));
 
         mat4.perspective(matProj, /* fovy= */ glMatrix.toRadian(90), /* aspectRatio= */ canvas.width / canvas.height, /* near, far= */ 0.1, 100.0);
 
@@ -701,8 +864,8 @@ export function introTo3DDemo(mazeData) {
 
         //
         // Render
-        canvas.width = canvas.clientWidth;
-        canvas.height = canvas.clientHeight;
+        canvas.width = innerWidth;
+        canvas.height = innerHeight;
 
         gl.clearColor(0.02, 0.02, 0.02, 1);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);

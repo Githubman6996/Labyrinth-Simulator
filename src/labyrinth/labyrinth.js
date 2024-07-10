@@ -24,14 +24,15 @@ wasm.instance.exports.setSeed(3);
 const mem = new Uint32Array(wasm.instance.exports.memory.buffer);
 
 const ROWS = 10;
-const COLS = 10;
-console.log(ROWS * COLS * 12)
+const COLS = 50;
+console.log(ROWS * COLS * 12);
 
 const maze_struct = wasm.instance.exports.createMaze(ROWS, COLS);
 
 function getMaze() {
     const maze = mem[maze_struct / Uint32Array.BYTES_PER_ELEMENT] / Uint32Array.BYTES_PER_ELEMENT;
     let hasUpdate = false;
+    let curPos = [0, 0];
     return Object.defineProperties(
         {
             size: { ROWS, COLS },
@@ -41,6 +42,9 @@ function getMaze() {
                 else wasm.instance.exports.shiftOrigin(maze_struct, ROWS, COLS);
                 hasUpdate = true;
             },
+            setPos(pos) {
+                [...curPos] = [...pos];
+            }
         },
         {
             maze: {
@@ -55,6 +59,9 @@ function getMaze() {
                     return hasUpdate;
                 },
             },
+            pos: {
+                get: () => curPos
+            }
         }
     );
 }
@@ -84,21 +91,20 @@ try {
 
 window.onkeypress = (e) => e.code == "KeyF" && maze.shift();
 
-// setInterval(function () {
-//     maze.shift()
-//     // if (state == REST && huntCountdown-- <= 0) {
-//     //     state = HUNT;
-//     // }
-//     // let [r, c] = maze.origin;
-//     // if (curR == null || state == REST) wasm.instance.exports.shiftOrigin(maze_struct, ROWS, COLS);
-//     // else wasm.instance.exports.shiftOriginToPoint(maze_struct, ROWS, COLS, curR, curC);
-//     // if (r == curR && c == curC) {
-//     //     state = REST;
-//     //     huntCountdown = 1500;
-//     //     randR = Math.floor(Math.random() * ROWS);
-//     //     randC = Math.floor(Math.random() * COLS);
-//     // }
+setInterval(function () {
+    maze.shift();
+    // if (state == REST && huntCountdown-- <= 0) {
+    //     state = HUNT;
+    // }
+    // let [r, c] = maze.origin;
+    // if (curR == null || state == REST) wasm.instance.exports.shiftOrigin(maze_struct, ROWS, COLS);
+    // else wasm.instance.exports.shiftOriginToPoint(maze_struct, ROWS, COLS, curR, curC);
+    // if (r == curR && c == curC) {
+    //     state = REST;
+    //     huntCountdown = 1500;
+    //     randR = Math.floor(Math.random() * ROWS);
+    //     randC = Math.floor(Math.random() * COLS);
+    // }
 
-//     // [r, c] = maze.origin;
-
-// }, 100);
+    // [r, c] = maze.origin;
+}, 100);
