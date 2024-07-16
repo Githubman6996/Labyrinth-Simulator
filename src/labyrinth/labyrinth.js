@@ -122,7 +122,7 @@ try {
 window.onkeypress = (e) => e.code == "KeyF" && maze.shift();
 
 setInterval(function () {
-    // maze.shift();
+    maze.shift();
     // if (state == REST && huntCountdown-- <= 0) {
     //     state = HUNT;
     // }
