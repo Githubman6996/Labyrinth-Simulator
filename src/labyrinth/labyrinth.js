@@ -1,3 +1,5 @@
+Math.TAU = Math.PI * 2;
+
 import "./gl-matrix-min.js";
 import { showError } from "./utils.js";
 import { introTo3DDemo } from "./webgl.js";
@@ -19,12 +21,12 @@ const wasm = await WebAssembly.instantiateStreaming(fetch("src/wasm/origin_shift
 });
 console.log(wasm);
 
-// wasm.instance.exports.setSeed(Date.now());
-wasm.instance.exports.setSeed(3);
+wasm.instance.exports.setSeed(Date.now());
+// wasm.instance.exports.setSeed(3);
 const mem = new Uint32Array(wasm.instance.exports.memory.buffer);
 
 const ROWS = 10;
-const COLS = 50;
+const COLS = 150;
 console.log(ROWS * COLS * 12);
 
 const maze_struct = wasm.instance.exports.createMaze(ROWS, COLS);
@@ -33,18 +35,43 @@ function getMaze() {
     const maze = mem[maze_struct / Uint32Array.BYTES_PER_ELEMENT] / Uint32Array.BYTES_PER_ELEMENT;
     let hasUpdate = false;
     let curPos = [0, 0];
-    return Object.defineProperties(
+    let hunt = false;
+    let huntCountdown = 250;
+    const mazeData = Object.defineProperties(
         {
             size: { ROWS, COLS },
-            shift(hunt, r, c, num) {
+            shift() {
                 if (hasUpdate) return;
-                if (hunt) wasm.instance.exports.shiftOriginToPoint(maze_struct, ROWS, COLS, r, c);
+                if (!hunt && huntCountdown-- <= 0) {
+                    hunt = true;
+                    console.log("HUNT");
+                }
+                if (hunt) wasm.instance.exports.shiftOriginToPoint(maze_struct, ROWS, COLS, curPos[0], curPos[1]);
                 else wasm.instance.exports.shiftOrigin(maze_struct, ROWS, COLS);
+                const o = this.origin;
+                if (o[0] == curPos[0] && o[1] == curPos[1]) {
+                    if (hunt) huntCountdown = 500;
+                    hunt = false;
+                    console.log("REST");
+                }
                 hasUpdate = true;
             },
-            setPos(pos) {
-                [...curPos] = [...pos];
-            }
+            setPos([r, c]) {
+                curPos[0] = r;
+                curPos[1] = c;
+            },
+            isValidCell(row, col) {
+                return row >= 0 && row < ROWS && col >= 0 && col < COLS;
+            },
+            getCell(row, col, maze) {
+                if (this.isValidCell(row, col)) return maze[row * COLS + col];
+            },
+            canConnectRight(row, col, maze) {
+                return this.getCell(row, col, maze) === 1 || this.getCell(row, col + 1, maze) === 3;
+            },
+            canConnectUp(row, col, maze) {
+                return this.getCell(row, col, maze) === 0 || this.getCell(row - 1, col, maze) === 2;
+            },
         },
         {
             maze: {
@@ -55,15 +82,18 @@ function getMaze() {
             },
             hasUpdate: {
                 get: () => {
-                    if (hasUpdate) return !(hasUpdate = false);
-                    return hasUpdate;
+                    // if (hasUpdate) return !(hasUpdate = false);
+                    // return false;
+                    return hasUpdate && !(hasUpdate = false);
                 },
             },
             pos: {
-                get: () => curPos
-            }
+                get: () => curPos,
+            },
         }
     );
+    for (const func of ["isValidCell", "getCell", "canConnectRight", "canConnectUp"]) mazeData[func] = mazeData[func].bind(mazeData);
+    return mazeData;
 }
 
 let maze = getMaze();
@@ -92,7 +122,7 @@ try {
 window.onkeypress = (e) => e.code == "KeyF" && maze.shift();
 
 setInterval(function () {
-    maze.shift();
+    // maze.shift();
     // if (state == REST && huntCountdown-- <= 0) {
     //     state = HUNT;
     // }
@@ -105,6 +135,5 @@ setInterval(function () {
     //     randR = Math.floor(Math.random() * ROWS);
     //     randC = Math.floor(Math.random() * COLS);
     // }
-
     // [r, c] = maze.origin;
 }, 100);
