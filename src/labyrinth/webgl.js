@@ -21,6 +21,7 @@ const fragmentShaderSourceCode = await fetch("src/labyrinth/shaders/fragment.gls
 const rounded = (x) => parseFloat(x.toPrecision(5));
 const roundCompare = (x, y) => Math.abs(x - y) <= 0.00001;
 const expDecay = (a, b, decay, dt) => (roundCompare(a, b) ? b : b + (a - b) * Math.exp(-decay * dt));
+const clamp = (min, max, x) => Math.min(max, Math.max(min, x));
 
 class Shape {
     matWorld = mat4.create();
@@ -520,6 +521,12 @@ class PlayerController {
     static SPRINT_MULTIPLIER = 2;
     static HEIGHT_REGEX = /^(\d+)'(\d+(?:.\d+)?)"$/;
     static MAX_RAW = Math.PI / 2;
+    static BOB_SPEED = 5;
+    static BOB_SPRINT_SPEED = 7;
+    static BOB_STRENGTH = 200 / 4; // inverse
+    static BOB_SPRINT_STRENGTH = 200 / 6; // inverse
+    static TILT_STRENGTH = 10; // inverse
+    static TILT_SPEED = 5;
 
     static FOV_EFFECTS_ENABLED = true;
 
@@ -530,10 +537,13 @@ class PlayerController {
     cameraSpeed = 3;
     zoom = 0;
     pressed = Object.create(null);
+    cameraBob = 0;
+    tiltVec = [0, 0];
+    cameraTilt = [0, 0];
 
     constructor(mazeData, canvas, shape) {
         const { ROWS, COLS } = (this.mazeData = mazeData).size;
-        const { cellSize, scale, wallThickness, scaledCell } = MazeShape;
+        const { scaledCell } = MazeShape;
 
         this.shape = shape;
 
@@ -554,7 +564,7 @@ class PlayerController {
             canvas.requestPointerLock();
             canvas.onmousemove = (e) => {
                 if (document.pointerLockElement != canvas) return;
-                const zoomSensitivity = this.sensitivity / (this.zoom <= 0 || !PlayerController.FOV_EFFECTS_ENABLED ? 1 : this.zoom / 22.5);
+                const zoomSensitivity = this.sensitivity * (this.zoom <= 0 || !PlayerController.FOV_EFFECTS_ENABLED ? 1 : 1 - this.zoom / 90);
                 this.cameraRot[0] += glMatrix.toRadian(e.movementX) * zoomSensitivity;
                 this.cameraRot[1] -= glMatrix.toRadian(e.movementY) * zoomSensitivity;
 
@@ -598,10 +608,13 @@ class PlayerController {
         const cyanCollision = cyanInWall && (!canConnectUp(row + 1, col, maze) || blueInWall || yellowInWall || blueIsNotYellow);
         return { blueCollision, redCollision, yellowCollision, cyanCollision };
     }
+    get sprinting() {
+        return this.pressed.ShiftLeft || this.pressed.ShiftRight;
+    }
     update(dt) {
-        const { cellSize, scaledCell, wallToCellRatio, transformToMaze, transformToMazeInverse } = MazeShape;
+        const { scaledCell, wallToCellRatio, transformToMaze, transformToMazeInverse } = MazeShape;
         let speed = this.cameraSpeed * dt;
-        const sprinting = this.pressed.ShiftLeft || this.pressed.ShiftRight;
+        const { sprinting } = this;
 
         if (sprinting) speed *= 2;
 
@@ -611,13 +624,14 @@ class PlayerController {
         let dx = 0,
             dz = 0;
 
-        // if (this.pressed.Space) {
-        //     this.cameraPOS[1] += speed;
-        // }
+        if (this.pressed.Space) {
+            this.cameraPOS[1] += speed * 2;
+        }
 
-        // if (this.pressed.ControlLeft) {
-        //     this.cameraPOS[1] -= speed;
-        // }
+        if (this.pressed.ControlLeft) {
+            this.cameraPOS[1] -= speed * 2;
+        }
+        this.tiltVec[0] = this.tiltVec[1] = 0;
 
         if (this.pressed.KeyW && !this.pressed.KeyS) {
             dx += cosPitch;
@@ -626,6 +640,8 @@ class PlayerController {
         if (this.pressed.KeyA && !this.pressed.KeyD) {
             dx += sinPitch;
             dz -= cosPitch;
+            this.tiltVec[0] = Math.sin(this.cameraRot[0]);
+            this.tiltVec[1] = -Math.cos(this.cameraRot[0]);
         }
         if (this.pressed.KeyS && !this.pressed.KeyW) {
             dx -= cosPitch;
@@ -634,7 +650,13 @@ class PlayerController {
         if (this.pressed.KeyD && !this.pressed.KeyA) {
             dx -= sinPitch;
             dz += cosPitch;
+            this.tiltVec[0] = -Math.sin(this.cameraRot[0]);
+            this.tiltVec[1] = Math.cos(this.cameraRot[0]);
         }
+
+        this.tiltVec[0] /= PlayerController.TILT_STRENGTH;
+        this.tiltVec[1] /= PlayerController.TILT_STRENGTH;
+
         if (!this.pressed.KeyC && this.zoom != 0) this.zoom = 0;
 
         const moved = dx != 0 || dz != 0;
@@ -644,7 +666,15 @@ class PlayerController {
 
         this.fovValue = this.rawFov;
 
+        const shouldTilt = Math.abs(this.cameraRot[1]) < 5 / 12 * Math.PI;
+
+        for (let i = 0; i < 2; i++) this.cameraTilt[i] = expDecay(this.cameraTilt[i], shouldTilt ? sprinting ? this.tiltVec[i] : this.tiltVec[i] / 2 : 0, PlayerController.TILT_SPEED, dt);
+
+        // console.log(this.cameraRot[1] * 180 / Math.PI, Math.abs(this.cameraRot[1]) > 5 / 12 * Math.PI);
+
         if (moved) {
+            this.cameraBob += (sprinting ? PlayerController.BOB_SPRINT_SPEED : PlayerController.BOB_SPEED) * dt;
+            this.cameraBob %= Math.PI;
             const {
                 maze,
                 size: { ROWS, COLS },
@@ -717,7 +747,7 @@ class PlayerController {
 
             // shapes[1].pos[0] = cameraPOS[0];
             // shapes[1].pos[2] = cameraPOS[2];
-        }
+        } else if (this.cameraBob != 0) this.cameraBob = expDecay(this.cameraBob > Math.PI / 4 ? -Math.PI / 4 : this.cameraBob, 0, PlayerController.BOB_SPEED / 2, dt);
     }
 }
 
@@ -738,17 +768,8 @@ window.requestAnimationFrame = (() => {
 window.cancelAnimationFrame = (id) => clearTimeout(id);
 
 export function introTo3DDemo(mazeData) {
-    const {
-        canConnectRight,
-        canConnectUp,
-        size: { ROWS, COLS },
-    } = mazeData;
-    const { cellSize, wallThickness, scale, transformToMaze, transformToMazeInverse } = MazeShape;
-    const scaledWall = wallThickness * scale;
-    const scaledCell = cellSize * scale;
-    const wallToCellRatio = parseFloat((scaledWall / scaledCell).toPrecision(10));
-    const halfC = (COLS * scaledCell) / 2;
-    const halfR = (ROWS * scaledCell) / 2;
+    const { ROWS, COLS } = mazeData.size;
+    const { scaledCell } = MazeShape;
 
     const canvas = document.querySelector("canvas");
     if (!canvas || !(canvas instanceof HTMLCanvasElement)) {
@@ -839,6 +860,14 @@ export function introTo3DDemo(mazeData) {
         framesAdded = average = 0;
     }, 1000 / frameCheckFreq);
 
+    let cameraBob = 0;
+    const BOB_SPEED = 5;
+
+    const getCameraVec = (pitch, raw) => {
+        const cosRaw = Math.cos(raw);
+        return vec3.fromValues(Math.cos(pitch) * cosRaw, Math.sin(raw), Math.sin(pitch) * cosRaw);
+    };
+
     const frame = function () {
         const thisFrameTime = performance.now();
         const dt = (thisFrameTime - lastFrameTime) / 1000;
@@ -847,21 +876,25 @@ export function introTo3DDemo(mazeData) {
         average += 1 / dt;
         framesAdded++;
 
+        cameraBob += BOB_SPEED * dt;
+
         // Update
 
         player.update(dt);
 
         const { cameraPOS, cameraRot, fovValue } = player;
 
-        const cosY = Math.cos(cameraRot[1]);
-        const cameraVec = vec3.fromValues(Math.cos(cameraRot[0]) * cosY, Math.sin(cameraRot[1]), Math.sin(cameraRot[0]) * cosY);
+        const camPit = cameraRot[0];
+        const camRaw = clamp(Math.PI / -2, Math.PI / 2, cameraRot[1] - Math.sin(player.cameraBob) ** 2 / (player.sprinting ? PlayerController.BOB_SPRINT_STRENGTH : PlayerController.BOB_STRENGTH));
 
-        vec3.add(lookAtPos, cameraPOS, cameraVec);
+        vec3.add(lookAtPos, cameraPOS, getCameraVec(camPit, camRaw));
 
-        const up = roundCompare(cameraPOS[0], lookAtPos[0]) && roundCompare(cameraPOS[2], lookAtPos[2]) ? vec3.scale([], [Math.cos(cameraRot[0]), 0, Math.sin(cameraRot[0])], cameraPOS[1] < lookAtPos[1] ? -1 : 1) : vec3.fromValues(0, 1, 0);
-        mat4.lookAt(matView, /* pos= */ cameraPOS, /* lookAt= */ lookAtPos, /* up= */ up);
+        console.log(camRaw.toPrecision(5));
 
-        // mat4.translate(matView, matView, vec3.scale([], cameraVec, player.zoom * 2));
+        const up = Math.abs(camRaw) + 0.01 >= Math.PI / 2 ? vec3.scale([], [Math.cos(cameraRot[0]), 0, Math.sin(cameraRot[0])], camRaw > 0 ? -1 : 1) : vec3.fromValues(player.cameraTilt[0], 1, player.cameraTilt[1]);
+
+        // vec3.add(lookAtPos, cameraPOS, getCameraVec(camPit, camRaw - camBob));
+        mat4.lookAt(matView, /* pos= */ [cameraPOS[0], cameraPOS[1], cameraPOS[2]], /* lookAt= */ lookAtPos, /* up= */ up);
 
         mat4.perspective(matProj, /* fovy= */ glMatrix.toRadian(PlayerController.FOV_EFFECTS_ENABLED ? fovValue : 90), /* aspectRatio= */ canvas.width / canvas.height, /* near, far= */ 0.1, 100.0);
 

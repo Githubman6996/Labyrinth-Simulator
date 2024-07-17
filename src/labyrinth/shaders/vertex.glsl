@@ -11,7 +11,6 @@ uniform mat4 matViewProj;
 uniform bool mazeCheck;
 
 void main() {
-
     fragmentColor = vertexColor;
     if(mazeCheck) {
         fragmentColor = vec3(1, 1, 1);
