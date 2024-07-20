@@ -18,9 +18,9 @@ document.body.append(fps);
 const vertexShaderSourceCode = await fetch("src/labyrinth/shaders/vertex.glsl").then((x) => x.text());
 const fragmentShaderSourceCode = await fetch("src/labyrinth/shaders/fragment.glsl").then((x) => x.text());
 
-const rounded = (x) => parseFloat(x.toPrecision(5));
+const rounded = (x, place = 5) => parseFloat(x.toFixed(place));
 const roundCompare = (x, y) => Math.abs(x - y) <= 0.00001;
-const expDecay = (a, b, decay, dt) => (roundCompare(a, b) ? b : b + (a - b) * Math.exp(-decay * dt));
+const expDecay = (a, b, decay, dt) => (roundCompare(a, b) ? b : b + (a - b) / Math.exp(decay * dt));
 const clamp = (min, max, x) => Math.min(max, Math.max(min, x));
 
 class Shape {
@@ -53,7 +53,7 @@ export class MazeShape {
     static rotationAxis = [0, 1, 0];
     static rotationAngle = 0;
 
-    static cellSize = 1.5;
+    static cellSize = 2;
     static wallThickness = 0.1;
     static wallHeight = 1;
 
@@ -118,6 +118,8 @@ export class MazeShape {
         this.stretchArr = new Array(COLS);
         window.addEventListener("keydown", (e) => e.code == "KeyG" && this.initMaze());
         this.initMaze();
+
+        mazeData.updateMesh = this.updateMaze.bind(this);
 
         mat4.fromRotationTranslationScale(this.matWorld, /* rotation= */ quat.setAxisAngle([], MazeShape.rotationAxis, MazeShape.rotationAngle), /* position= */ this.pos, /* scale= */ [MazeShape.scale, MazeShape.scale, MazeShape.scale]);
     }
@@ -500,8 +502,7 @@ export class MazeShape {
         return vao;
     }
     draw(gl, matWorldUniform, mazeCheckUniform) {
-        if (this.mazeData.hasUpdate) this.updateMaze();
-        // if (this.mazeData.hasUpdate) this.initMaze();
+        // if (this.mazeData.hasUpdate) this.updateMaze();
 
         gl.uniformMatrix4fv(matWorldUniform, false, this.matWorld);
         gl.uniform1i(mazeCheckUniform, 1);
@@ -525,8 +526,8 @@ class PlayerController {
     static BOB_SPRINT_SPEED = 7;
     static BOB_STRENGTH = 200 / 4; // inverse
     static BOB_SPRINT_STRENGTH = 200 / 6; // inverse
-    static TILT_STRENGTH = 10; // inverse
     static TILT_SPEED = 5;
+    static TILT_ANGLE = glMatrix.toRadian(2.5);
 
     static FOV_EFFECTS_ENABLED = true;
 
@@ -540,6 +541,8 @@ class PlayerController {
     cameraBob = 0;
     tiltVec = [0, 0];
     cameraTilt = [0, 0];
+    isSprinting = false;
+    tiltAngle = 0;
 
     constructor(mazeData, canvas, shape) {
         const { ROWS, COLS } = (this.mazeData = mazeData).size;
@@ -556,6 +559,7 @@ class PlayerController {
 
         this.cameraPOS = vec3.fromValues(((1 - COLS) * scaledCell) / 2, this.eyeLevel, ((ROWS - 1) * scaledCell) / 2);
         shape.pos[0] = this.cameraPOS[0];
+        shape.pos[1] = shape.scaleVec[1] = this.cubeHeight;
         shape.pos[2] = this.cameraPOS[2];
         this.cameraRot = vec2.fromValues(0, 0);
         Math.TAU ??= Math.PI * 2;
@@ -590,10 +594,10 @@ class PlayerController {
     getCollisions([row, col], maze, red, blue, cyan, yellow) {
         const { wallToCellRatio } = MazeShape;
         const { canConnectRight, canConnectUp } = this.mazeData;
-        const bluePos = parseFloat((blue - col).toPrecision(10));
-        const redPos = parseFloat((red - row).toPrecision(10));
-        const yellowPos = parseFloat((yellow - col).toPrecision(10));
-        const cyanPos = parseFloat((cyan - row).toPrecision(10));
+        const bluePos = rounded(blue - col, 10);
+        const redPos = rounded(red - row, 10);
+        const yellowPos = rounded(yellow - col, 10);
+        const cyanPos = rounded(cyan - row, 10);
 
         const blueInWall = bluePos > 1 - wallToCellRatio;
         const redInWall = redPos < wallToCellRatio;
@@ -609,10 +613,11 @@ class PlayerController {
         return { blueCollision, redCollision, yellowCollision, cyanCollision };
     }
     get sprinting() {
-        return this.pressed.ShiftLeft || this.pressed.ShiftRight;
+        return /* this.isSprinting ||= */ this.pressed.ShiftLeft || this.pressed.ShiftRight;
     }
     update(dt) {
         const { scaledCell, wallToCellRatio, transformToMaze, transformToMazeInverse } = MazeShape;
+        const { NORMAL_FOV, SPRINT_FOV, FOV_DECAY, BOB_SPEED, BOB_SPRINT_SPEED, TILT_SPEED, TILT_ANGLE } = PlayerController;
         let speed = this.cameraSpeed * dt;
         const { sprinting } = this;
 
@@ -622,16 +627,16 @@ class PlayerController {
         const sinPitch = Math.sin(this.cameraRot[0]) * speed;
 
         let dx = 0,
-            dz = 0;
+            dz = 0,
+            tiltDirection = 0;
 
         if (this.pressed.Space) {
             this.cameraPOS[1] += speed * 2;
         }
 
         if (this.pressed.ControlLeft) {
-            this.cameraPOS[1] -= speed * 2;
+            this.cameraPOS[1] = Math.max(this.eyeLevel, this.cameraPOS[1] - speed * 2);
         }
-        this.tiltVec[0] = this.tiltVec[1] = 0;
 
         if (this.pressed.KeyW && !this.pressed.KeyS) {
             dx += cosPitch;
@@ -640,8 +645,7 @@ class PlayerController {
         if (this.pressed.KeyA && !this.pressed.KeyD) {
             dx += sinPitch;
             dz -= cosPitch;
-            this.tiltVec[0] = Math.sin(this.cameraRot[0]);
-            this.tiltVec[1] = -Math.cos(this.cameraRot[0]);
+            tiltDirection++;
         }
         if (this.pressed.KeyS && !this.pressed.KeyW) {
             dx -= cosPitch;
@@ -650,30 +654,24 @@ class PlayerController {
         if (this.pressed.KeyD && !this.pressed.KeyA) {
             dx -= sinPitch;
             dz += cosPitch;
-            this.tiltVec[0] = -Math.sin(this.cameraRot[0]);
-            this.tiltVec[1] = Math.cos(this.cameraRot[0]);
+            tiltDirection--;
         }
-
-        this.tiltVec[0] /= PlayerController.TILT_STRENGTH;
-        this.tiltVec[1] /= PlayerController.TILT_STRENGTH;
 
         if (!this.pressed.KeyC && this.zoom != 0) this.zoom = 0;
 
-        const moved = dx != 0 || dz != 0;
+        let moved = dx != 0 || dz != 0;
 
-        const curFov = (sprinting && moved ? PlayerController.SPRINT_FOV : PlayerController.NORMAL_FOV) - this.zoom;
-        if (this.rawFov != curFov) this.rawFov = expDecay(this.rawFov, curFov, PlayerController.FOV_DECAY, dt);
+        const curFov = (sprinting && moved ? SPRINT_FOV : NORMAL_FOV) - this.zoom;
+        if (this.rawFov != curFov) this.rawFov = expDecay(this.rawFov, curFov, FOV_DECAY, dt);
 
         this.fovValue = this.rawFov;
 
-        const shouldTilt = Math.abs(this.cameraRot[1]) < 5 / 12 * Math.PI;
+        const shouldTilt = this.pressed.KeyA || this.pressed.KeyD;
 
-        for (let i = 0; i < 2; i++) this.cameraTilt[i] = expDecay(this.cameraTilt[i], shouldTilt ? sprinting ? this.tiltVec[i] : this.tiltVec[i] / 2 : 0, PlayerController.TILT_SPEED, dt);
-
-        // console.log(this.cameraRot[1] * 180 / Math.PI, Math.abs(this.cameraRot[1]) > 5 / 12 * Math.PI);
+        this.tiltAngle = expDecay(this.tiltAngle, tiltDirection * (shouldTilt ? (sprinting ? TILT_ANGLE : TILT_ANGLE / 2) : 0), TILT_SPEED, dt);
 
         if (moved) {
-            this.cameraBob += (sprinting ? PlayerController.BOB_SPRINT_SPEED : PlayerController.BOB_SPEED) * dt;
+            this.cameraBob += (sprinting ? BOB_SPRINT_SPEED : BOB_SPEED) * dt;
             this.cameraBob %= Math.PI;
             const {
                 maze,
@@ -745,17 +743,20 @@ class PlayerController {
             this.shape.pos[0] = this.cameraPOS[0] += dx;
             this.shape.pos[2] = this.cameraPOS[2] += dz;
 
-            // shapes[1].pos[0] = cameraPOS[0];
-            // shapes[1].pos[2] = cameraPOS[2];
-        } else if (this.cameraBob != 0) this.cameraBob = expDecay(this.cameraBob > Math.PI / 4 ? -Math.PI / 4 : this.cameraBob, 0, PlayerController.BOB_SPEED / 2, dt);
+            moved = rounded(dx, 4) != 0 || rounded(dz, 4) != 0;
+        } else {
+            if (this.cameraBob != 0) this.cameraBob = expDecay(this.cameraBob > Math.PI / 4 ? -Math.PI / 4 : this.cameraBob, 0, BOB_SPEED / 2, dt);
+            if (sprinting) this.isSprinting = false;
+        }
+        // fps.style.color = moved ? "red" : "green";
     }
 }
 
-window.MAX_FRAMERATE = 60;
+window.TARGET_FRAMERATE = 0;
 
 window.requestAnimationFrame = (() => {
     let lastTime = performance.now();
-    return function (callback, maxFrameRate = MAX_FRAMERATE) {
+    return function (callback, maxFrameRate = window.TARGET_FRAMERATE) {
         const curTime = performance.now();
         const timeBetween = !isNaN(maxFrameRate) && isFinite(maxFrameRate) && maxFrameRate > 0 ? 1000 / maxFrameRate : 0;
         const timeToCall = Math.max(0, timeBetween - (curTime - lastTime));
@@ -819,17 +820,9 @@ export function introTo3DDemo(mazeData) {
         return;
     }
 
-    let height = "5'6\"" || prompt(`How tall are you? Ex: 5'6"`);
-    const heightRegex = /^(\d+)'(\d+)"$/;
-    let heightMatch;
-    while ((heightMatch = height.match(heightRegex)) == null) height = prompt(`How tall are you? Ex: 5'6"\n\nInvalid Input`);
-    const inches = Math.min(72, Math.max(0, parseInt(heightMatch[1]) * 12 + parseInt(heightMatch[2])));
-    const eyeLevel = Math.pow(1.09, inches) / 200;
-    const cubeHeight = (eyeLevel * 2) / 3;
-
     const UP_VEC = vec3.fromValues(0, 1, 0);
 
-    const player = new PlayerController(mazeData, canvas, new Shape(vec3.fromValues(0, cubeHeight, 0), [0.5, cubeHeight, 0.5], UP_VEC, 0, cubeVao, CUBE_INDICES.length));
+    const player = new PlayerController(mazeData, canvas, new Shape([0, 0, 0], [0.5, 0.5, 0.5], UP_VEC, 0, cubeVao, CUBE_INDICES.length));
 
     const shapes = [
         new Shape(vec3.fromValues(0, 0, 0), [(COLS / 2) * scaledCell, 10, (ROWS / 2) * scaledCell], UP_VEC, 0, tableVao, TABLE_INDICES.length), // Ground
@@ -863,9 +856,30 @@ export function introTo3DDemo(mazeData) {
     let cameraBob = 0;
     const BOB_SPEED = 5;
 
-    const getCameraVec = (pitch, raw) => {
-        const cosRaw = Math.cos(raw);
-        return vec3.fromValues(Math.cos(pitch) * cosRaw, Math.sin(raw), Math.sin(pitch) * cosRaw);
+    /* 
+        https://www.desmos.com/3d/kkazfjvlav
+
+        X = cos(P)cos(Y)
+        Y = sin(Y)
+        Z = sin(P)cos(Y)
+
+        X' = -cos(P)sin(Y)cos(t) - sin(P)sin(t)
+        Y' = cos(Y)cos(t)
+        Z' = cos(P)sin(t) - sin(P)sin(Y)cos(t)
+    */
+
+    const getCameraVecs = (pitch, yaw, tilt) => {
+        const cosP = Math.cos(pitch);
+        const sinP = Math.sin(pitch);
+        const cosY = Math.cos(yaw);
+        const sinY = Math.sin(yaw);
+        const cosT = Math.cos(tilt);
+        const sinT = Math.sin(tilt);
+
+        return {
+            lookAt: vec3.fromValues(cosP * cosY, sinY, sinP * cosY),
+            up: vec3.fromValues(-cosP * sinY * cosT + sinP * sinT, cosY * cosT, cosP * -sinT - sinP * sinY * cosT),
+        };
     };
 
     const frame = function () {
@@ -885,15 +899,12 @@ export function introTo3DDemo(mazeData) {
         const { cameraPOS, cameraRot, fovValue } = player;
 
         const camPit = cameraRot[0];
-        const camRaw = clamp(Math.PI / -2, Math.PI / 2, cameraRot[1] - Math.sin(player.cameraBob) ** 2 / (player.sprinting ? PlayerController.BOB_SPRINT_STRENGTH : PlayerController.BOB_STRENGTH));
+        const camYaw = cameraRot[1] - Math.sin(player.cameraBob) ** 2 / (player.sprinting ? PlayerController.BOB_SPRINT_STRENGTH : PlayerController.BOB_STRENGTH);
 
-        vec3.add(lookAtPos, cameraPOS, getCameraVec(camPit, camRaw));
+        const { lookAt, up } = getCameraVecs(camPit, camYaw, player.tiltAngle);
 
-        console.log(camRaw.toPrecision(5));
+        vec3.add(lookAtPos, cameraPOS, lookAt);
 
-        const up = Math.abs(camRaw) + 0.01 >= Math.PI / 2 ? vec3.scale([], [Math.cos(cameraRot[0]), 0, Math.sin(cameraRot[0])], camRaw > 0 ? -1 : 1) : vec3.fromValues(player.cameraTilt[0], 1, player.cameraTilt[1]);
-
-        // vec3.add(lookAtPos, cameraPOS, getCameraVec(camPit, camRaw - camBob));
         mat4.lookAt(matView, /* pos= */ [cameraPOS[0], cameraPOS[1], cameraPOS[2]], /* lookAt= */ lookAtPos, /* up= */ up);
 
         mat4.perspective(matProj, /* fovy= */ glMatrix.toRadian(PlayerController.FOV_EFFECTS_ENABLED ? fovValue : 90), /* aspectRatio= */ canvas.width / canvas.height, /* near, far= */ 0.1, 100.0);
@@ -914,7 +925,7 @@ export function introTo3DDemo(mazeData) {
         gl.uniformMatrix4fv(matViewProjUniform, false, matViewProj);
         gl.uniform1i(mazeCheckUniform, 0);
 
-        shapes.forEach((shape) => shape.draw(gl, matWorldUniform, mazeCheckUniform));
+        for (const shape of shapes) shape.draw(gl, matWorldUniform, mazeCheckUniform);
 
         // shapes[1].rotationAngle += 0.02
         // mazeShape.draw(gl, matWorldUniform, mazeCheckUniform);

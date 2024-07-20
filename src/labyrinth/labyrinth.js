@@ -26,7 +26,7 @@ wasm.instance.exports.setSeed(Date.now());
 const mem = new Uint32Array(wasm.instance.exports.memory.buffer);
 
 const ROWS = 10;
-const COLS = 150;
+const COLS = 10;
 console.log(ROWS * COLS * 12);
 
 const maze_struct = wasm.instance.exports.createMaze(ROWS, COLS);
@@ -41,7 +41,7 @@ function getMaze() {
         {
             size: { ROWS, COLS },
             shift() {
-                if (hasUpdate) return;
+                if ("updateMesh" in this == false) return;
                 if (!hunt && huntCountdown-- <= 0) {
                     hunt = true;
                     console.log("HUNT");
@@ -50,10 +50,11 @@ function getMaze() {
                 else wasm.instance.exports.shiftOrigin(maze_struct, ROWS, COLS);
                 const o = this.origin;
                 if (o[0] == curPos[0] && o[1] == curPos[1]) {
-                    if (hunt) huntCountdown = 500;
+                    if (hunt) huntCountdown = 1000;
                     hunt = false;
                     console.log("REST");
                 }
+                this.updateMesh();
                 hasUpdate = true;
             },
             setPos([r, c]) {
@@ -136,4 +137,4 @@ setInterval(function () {
     //     randC = Math.floor(Math.random() * COLS);
     // }
     // [r, c] = maze.origin;
-}, 100);
+}, 50);
